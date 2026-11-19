@@ -1,5 +1,5 @@
 import { SUPPORT_LINE_E164 } from "../shared/constants";
-import type { ConsentWarning, FacilityRecord, SmsMessage } from "../shared/types";
+import type { Booking, ConsentWarning, FacilityRecord, SmsMessage } from "../shared/types";
 
 export const DEMO_PHONES = {
   taken: "+16479895702",
@@ -27,9 +27,9 @@ export const DEMO_FACILITIES: FacilityRecord[] = [
     name: "17 Raymond St. - Spot #4 or 5 Only",
     address: "17 Raymond St, Chicago, IL",
     facilityId: "RAY-17",
-    status: "Active",
+    status: "IN OPERATION",
     notes:
-      "Gate code 4821. Size limit: standard cars only, max 72 in wide. Access point: alley behind the building. Directions: https://yourspotrented.com/d/ray17. Spots 4 or 5 only.",
+      "Gate Code: (2 4 6 8)\nTo ENTER the lot, enter the code, then press the LEFT ARROW button. Size limit: standard cars only. Directions: https://yourspotrented.com/d/ray17",
     gps: "41.8901, -87.6305",
     stallCount: 2,
     stallsByPlatform: "SpotHero 2",
@@ -47,7 +47,7 @@ export const DEMO_FACILITIES: FacilityRecord[] = [
     name: "500 Wabash Lot",
     address: "500 Wabash Ave, Chicago, IL",
     facilityId: "WAB-500",
-    status: "Active",
+    status: "IN OPERATION",
     notes: "No gate. Monthly and transient. Size limit not listed.",
     gps: "41.8920, -87.6260",
     stallCount: 6,
@@ -61,7 +61,95 @@ export const DEMO_FACILITIES: FacilityRecord[] = [
     phone: "",
     email: "",
   },
+  {
+    id: "recSAMPLE",
+    name: "78 Sample St. - Garage",
+    address: "78 Sample St, Chicago, IL",
+    facilityId: "SMP-78",
+    status: "IN OPERATION",
+    notes: "",
+    gps: "",
+    stallCount: 4,
+    stallsByPlatform: "SpotHero 4",
+    towingCompany: "CODED GARAGE - lookup tool not set up. On call only provide the garage code.",
+    salesTowAuthorization: "",
+    landlord: "Sample Holdings",
+    doNotTowPlates: "",
+    doNotTowVehicles: "",
+    contactPerson: "",
+    phone: "",
+    email: "",
+  },
+  {
+    id: "recCLOSED",
+    name: "9 Archive Ave. - Gate",
+    address: "9 Archive Ave, Chicago, IL",
+    facilityId: "ARC-9",
+    status: "PERMANENTLY CLOSED",
+    notes: "Garage code: 9091",
+    gps: "",
+    stallCount: 1,
+    stallsByPlatform: "",
+    towingCompany: "",
+    salesTowAuthorization: "",
+    landlord: "",
+    doNotTowPlates: "",
+    doNotTowVehicles: "",
+    contactPerson: "",
+    phone: "",
+    email: "",
+  },
 ];
+
+function monthsAgo(now: Date, months: number): string {
+  return new Date(now.getFullYear(), now.getMonth() - months, 6, 15, 0, 0).toISOString();
+}
+
+/** Synthetic bookings only. No real customer or facility codes. */
+export function buildDemoBookings(now: Date): Booking[] {
+  const rows: Booking[] = [
+    {
+      id: "M500100",
+      source: "monthly",
+      facilityName: "17 Raymond St. - Spot #4 or 5 Only",
+      platform: "SpotHero",
+      start: monthsAgo(now, 8),
+      end: new Date(now.getFullYear() + 1, now.getMonth(), 1).toISOString(),
+      status: "Active",
+      plate: "GATE1",
+      phone: DEMO_PHONES.gate,
+    },
+  ];
+  for (let index = 0; index < 4; index += 1) {
+    rows.push({
+      id: `PW700100${index}`,
+      source: "transient",
+      facilityName: "500 Wabash Lot",
+      platform: "Parkwhiz",
+      start: monthsAgo(now, 8 - index),
+      end: monthsAgo(now, 8 - index),
+      status: "Ended",
+      plate: "QL77",
+      phone: DEMO_PHONES.refund,
+    });
+  }
+  for (let index = 0; index < 16; index += 1) {
+    rows.push({
+      id: `WY80010${String(index).padStart(2, "0")}`,
+      source: "transient",
+      facilityName: "500 Wabash Lot",
+      platform: index % 2 === 0 ? "Way.com" : "Parkwhiz",
+      start: monthsAgo(now, 16 - index),
+      end: monthsAgo(now, 16 - index),
+      status: "Ended",
+      plate: "EXT100",
+      phone: DEMO_PHONES.extension,
+    });
+  }
+  return rows;
+}
+
+export const DEMO_BOOKINGS: Booking[] = buildDemoBookings(new Date("2026-11-19T18:00:00.000Z"));
 
 function sms(
   id: string,
@@ -125,6 +213,8 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
       "My car was towed from the lot. This is ridiculous. Call me at (312) 555-0144. Gate code 4821. I want a lawyer and my money back.",
       at(11),
     ),
+    sms("refund-old", refund, "inbound", "I can't find the entrance. Where do I park?", at(100 * 24 * 60)),
+    sms("refund-old-a", refund, "outbound", "Use the alley door.", at(100 * 24 * 60 - 10)),
     sms("refund-res", refund, "inbound", reservation(now, "500 Wabash Lot", "136244125", "QL77", "Priya"), at(50)),
     sms(
       "refund-now",
@@ -143,6 +233,10 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
       at(28),
     ),
     sms("react-tap", reactionDone, "inbound", "Loved “You won't be towed as long as you park in the correct spot.”", at(27)),
+    sms("gate-full-1", gate, "inbound", "The lot was full and someone was in my spot at 17 Raymond.", at(40 * 24 * 60)),
+    sms("gate-full-a", gate, "outbound", "I moved you to another open spot.", at(40 * 24 * 60 - 20)),
+    sms("gate-full-2", gate, "inbound", "Lot full again at 17 Raymond. All spots taken.", at(20 * 24 * 60)),
+    sms("gate-full-b", gate, "outbound", "Use spot 5 today.", at(20 * 24 * 60 - 15)),
     sms("gate-res", gate, "inbound", reservation(now, "17 Raymond St", "138420011", "GATE1", "Jon"), at(25)),
     sms("gate-old", gate, "inbound", "The gate code isn't working.", at(20)),
     sms("gate-ask", gate, "outbound", "Which code did you try?", at(18)),

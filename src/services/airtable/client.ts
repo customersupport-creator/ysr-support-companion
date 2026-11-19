@@ -1,6 +1,7 @@
 import { AIRTABLE, SUPPORT_LINE_E164 } from "../../shared/constants";
 import { toE164 } from "../../core/format";
-import type { FacilityRecord, SmsMessage, SopRecord } from "../../shared/types";
+import { phonesMatch } from "../../core/phoneMatch";
+import type { Booking, FacilityRecord, SmsMessage, SopRecord } from "../../shared/types";
 
 interface AirtableRecord {
   id: string;
@@ -13,10 +14,35 @@ interface ListResponse {
 }
 
 
+function bookingFrom(
+  record: AirtableRecord,
+  source: Booking["source"],
+  idField: string,
+  phone: string,
+  facilityNames: Map<string, string>,
+  fields: { facility: string; platform: string; start: string; end: string; status: string; plate: string },
+): Booking {
+  const rawId = text(record.fields[idField]);
+  const facilityRaw = text(record.fields[fields.facility]);
+  const facilityName = facilityNames.get(facilityRaw) || facilityRaw;
+  return {
+    id: rawId || `${source}:${record.id}`,
+    source,
+    facilityName,
+    platform: text(record.fields[fields.platform]),
+    start: text(record.fields[fields.start]) || undefined,
+    end: text(record.fields[fields.end]) || undefined,
+    status: text(record.fields[fields.status]),
+    plate: text(record.fields[fields.plate]) || undefined,
+    phone: phone || undefined,
+  };
+}
+
 function text(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => text(item)).filter(Boolean).join(", ");
   return "";
 }
 
@@ -104,6 +130,72 @@ export class AirtableClient {
         email: text(record.fields["EMAIL ADDRESS"]),
       };
     });
+  }
+
+  async listCustomerBookings(input: {
+    phone: string;
+    rentalIds: string[];
+    monthlyTable: string;
+    leaseTable: string;
+    transientTable: string;
+    facilityNames: Map<string, string>;
+  }): Promise<Booking[]> {
+    const monthly = await this.cachedTable(AIRTABLE.facilityBaseId, input.monthlyTable, 8);
+    const leases = await this.cachedTable(AIRTABLE.facilityBaseId, input.leaseTable, 4);
+    const rows: Booking[] = [];
+    for (const record of monthly) {
+      const phone = text(record.fields["PHONE NUMBER"]);
+      if (!phonesMatch(phone, input.phone)) continue;
+      rows.push(bookingFrom(record, "monthly", "RESERVATION ID", phone, input.facilityNames, {
+        facility: "Facility Name",
+        platform: "PLATFORM",
+        start: "START DATE",
+        end: "END DATE",
+        status: "STATUS",
+        plate: "LICENSE PLATE",
+      }));
+    }
+    for (const record of leases) {
+      const phone = text(record.fields["Phone number"] ?? record.fields["PHONE NUMBER"]);
+      if (!phonesMatch(phone, input.phone)) continue;
+      rows.push(bookingFrom(record, "lease", "Reservation ID", phone, input.facilityNames, {
+        facility: "Facility",
+        platform: "PLATFORM",
+        start: "Start",
+        end: "End",
+        status: "Status",
+        plate: "Vehicle information",
+      }));
+    }
+    const ids = [...new Set(input.rentalIds.map((id) => id.trim()).filter((id) => /^\d{6,12}$/.test(id) || /^[A-Za-z0-9-]{6,20}$/.test(id)))].slice(0, 20);
+    if (ids.length) {
+      const formula = `OR(${ids.map((id) => `{RESERVATION ID}='${id.replace(/'/g, "")}'`).join(",")})`;
+      const transient = await this.listAll(AIRTABLE.facilityBaseId, input.transientTable, 5, {
+        filterByFormula: formula,
+      });
+      for (const record of transient) {
+        rows.push(bookingFrom(record, "transient", "RESERVATION ID", "", input.facilityNames, {
+          facility: "Facility",
+          platform: "PLATFORM",
+          start: "START",
+          end: "END",
+          status: "RESERVATION STATUS",
+          plate: "License Plate",
+        }));
+      }
+    }
+    return rows;
+  }
+
+  private tableCache = new Map<string, { at: number; records: AirtableRecord[] }>();
+
+  private async cachedTable(baseId: string, tableId: string, maxPages: number): Promise<AirtableRecord[]> {
+    const key = `${baseId}/${tableId}`;
+    const hit = this.tableCache.get(key);
+    if (hit && Date.now() - hit.at < 30 * 60_000) return hit.records;
+    const records = await this.listAll(baseId, tableId, maxPages);
+    this.tableCache.set(key, { at: Date.now(), records });
+    return records;
   }
 
   private async listAll(

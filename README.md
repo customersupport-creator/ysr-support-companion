@@ -21,8 +21,11 @@ npm run dev
 - The header bell lists unresolved urgent threads (towing, damage, threats, stuck, and the other urgent keywords). The red badge is how many of those the agent has not marked seen. A new urgent thread toasts immediately while the agent is Available, plays a short sound (mute it in Settings), and flashes the taskbar. Away still updates the badge and does not play the sound. Mark seen clears the highlight. Resolve or an answer removes the item. Nothing is sent.
 - Each card shows rental IDs found in the thread (usually a 9-digit SpotHero id such as 138424128), with a copy button. The 5-minute toast includes the newest id when one is known.
 - Resolve removes that number from the queue on this computer only. It does not text the customer or change RingCentral. If they text again, the number comes back. Undo is available for a few seconds, and Resolved today lists what you hid today.
+- When Auto-resolve is on (the default), a real reply from the support line clears that number from the queue and the urgent bell, cancels its pending alert, and logs `Auto-resolved: replied by {agent} at {time CT}`. Reactions, out-of-hours auto-replies, opt-out confirmations, and failed or undelivered sends stay on the queue. A later customer text opens it again.
 - **Open in BeeTexting** is the default. It copies the customer number as `+1XXXXXXXXXX` and opens https://app.beetexting.com/ so you can paste it into BeeTexting search. Settings can store an optional conversation link on that same host, with `{number}`, `{number_e164}`, or `{number_digits}`, for the day BeeTexting documents a thread URL. RingCentral desktop and RingCentral web stay available. Desktop uses `rcapp://r/sms?type=new&number=...` with no message text, and falls back to the website if the app does not open. Nothing is sent.
 - Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text.
+- Garage and gate codes are parsed from facility notes. A card shows the code when the thread, a booking, or a manual pick identifies the facility. Codes are hidden until you reveal them. Facilities with codes is a searchable list, in-operation sites first. Parsed codes are encrypted on this computer and refresh on launch, every 30 minutes, and from Refresh.
+- Customer history, on each card, lists past SMS for that number and bookings from MONTHLY, Internal lease, and TRANSIENT. Issue tags summarize repeat problems. High value means an active monthly or lease, or more than 15 deduped transient bookings. The threshold is in Settings. Demo facilities and codes are made up.
 
 ## Build the Windows installer
 
@@ -61,12 +64,12 @@ Create a personal access token at https://airtable.com/create/tokens with:
 - `data.records:read`
 - `schema.bases:read`
 
+The same token reads Facility Management for `FACILITY INFORMATION`, `MONTHLY`, `Internal lease`, and `TRANSIENT`. Table names are in Settings if a base uses different ones. The desk only reads those tables. It does not write to them.
+
 Attach both bases:
 
 - BeeTexting QA (`app4Vn8uT6XtMn89X`) — SOPs in `BEETEXTING_SOPS`, and the existing SMS log in `BEETEXTING_MESSAGES` as a secondary feed.
-- Facility Management Database (`app9iYUN8J3z2wjXN`) — `FACILITY INFORMATION`.
-
-The desk only reads those tables. It does not write to them.
+- Facility Management Database (`app9iYUN8J3z2wjXN`) — `FACILITY INFORMATION`, plus `MONTHLY`, `Internal lease`, and `TRANSIENT` for booking history.
 
 ## Add a panel later
 

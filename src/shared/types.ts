@@ -14,6 +14,10 @@ export interface SmsMessage {
   fromPhone: string;
   toPhone: string;
   source: MessageSource;
+  /** RingCentral messageStatus, when the store sent one. */
+  messageStatus?: string;
+  /** Outbound sender name, when RingCentral provides it. */
+  agentName?: string;
 }
 
 export interface ConsentWarning {
@@ -43,6 +47,11 @@ export interface QueueCard {
   lastCustomerMessageId: string;
   /** thread id + message id, so a new customer text is a new queue item */
   key: string;
+  facilityRecordId: string | null;
+  facilityName: string | null;
+  access: FacilityAccess | null;
+  issues: IssueSummary[];
+  value: ValueScore;
 }
 
 /** Local only. A newer inbound message than lastCustomerMessageId puts the number back. */
@@ -50,6 +59,8 @@ export interface ResolvedRecord {
   phone: string;
   lastCustomerMessageId: string;
   resolvedAt: string;
+  kind?: "manual" | "auto";
+  agentName?: string;
 }
 
 /** The urgent highlight was cleared for this exact customer message. */
@@ -128,6 +139,7 @@ export interface FacilityRecord {
   contactPerson: string;
   phone: string;
   email: string;
+  access?: FacilityAccess | null;
 }
 
 export interface FacilityFacts {
@@ -135,6 +147,108 @@ export interface FacilityFacts {
   directions?: string;
   sizeLimit?: string;
   accessPoint?: string;
+}
+
+export interface AccessCodeEntry {
+  label: string;
+  code: string;
+}
+
+export interface FacilityAccess {
+  accessType: string;
+  codes: AccessCodeEntry[];
+  instructions: string;
+  confidence: "high" | "medium";
+  codedGarageNoCode: boolean;
+}
+
+export interface FacilityListItem {
+  id: string;
+  name: string;
+  address: string;
+  status: string;
+  access: FacilityAccess | null;
+}
+
+export type BookingSource = "monthly" | "lease" | "transient" | "sms";
+
+export interface Booking {
+  id: string;
+  source: BookingSource;
+  facilityName: string;
+  platform: string;
+  start?: string;
+  end?: string;
+  status: string;
+  plate?: string;
+  phone?: string;
+}
+
+export type IssueCategory =
+  | "lot-full"
+  | "inaccessible"
+  | "directions"
+  | "towed"
+  | "damage"
+  | "refund"
+  | "overcharge"
+  | "pass"
+  | "ticket"
+  | "safety";
+
+export interface IssueHit {
+  category: IssueCategory;
+  label: string;
+  color: string;
+  at: string;
+  messageId: string;
+  facility: string;
+  rentalId: string;
+  snippet: string;
+  current: boolean;
+}
+
+export interface IssueSummary {
+  category: IssueCategory;
+  label: string;
+  color: string;
+  count: number;
+  repeatFacility: boolean;
+  current: boolean;
+  latest: IssueHit;
+}
+
+export type CustomerTier = "high" | "regular" | "new";
+
+export interface ValueScore {
+  tier: CustomerTier;
+  totalBookings: number;
+  bookings90Days: number;
+  bookings12Months: number;
+  distinctMonths12: number;
+  distinctMonths6: number;
+  monthStreak: number;
+  favoriteFacility: string | null;
+  regularPattern: boolean;
+  activeMonthlyOrLease: boolean;
+  firstSeen: string | null;
+  lastBooking: string | null;
+  reason: string;
+}
+
+export interface HistoryMessage {
+  id: string;
+  direction: Direction;
+  body: string;
+  sentAt: string;
+  agentName: string;
+}
+
+export interface CustomerHistoryPage {
+  phone: string;
+  messages: HistoryMessage[];
+  nextCursor: string | null;
+  bookings: Booking[];
 }
 
 export interface ThreadView {
@@ -170,6 +284,12 @@ export interface PublicSettings {
   openNumbersIn: "beetexting" | "desktop" | "web";
   beeTextingTemplate: string;
   urgentSound: boolean;
+  showAccessCodes: boolean;
+  historyMonthlyTable: string;
+  historyLeaseTable: string;
+  historyTransientTable: string;
+  transientHighValueOver: number;
+  autoResolveOnReply: boolean;
   consentPhones: ConsentWarning[];
   secureStorage: boolean;
 }
@@ -193,6 +313,7 @@ export interface AppSnapshot {
   resolvedToday: ResolvedRecord[];
   urgentItems: UrgentListItem[];
   unseenUrgentCount: number;
+  facilities: FacilityListItem[];
   banner: string | null;
 }
 
@@ -211,6 +332,12 @@ export interface SettingsPatch {
   openNumbersIn?: "beetexting" | "desktop" | "web";
   beeTextingTemplate?: string;
   urgentSound?: boolean;
+  showAccessCodes?: boolean;
+  historyMonthlyTable?: string;
+  historyLeaseTable?: string;
+  historyTransientTable?: string;
+  transientHighValueOver?: number;
+  autoResolveOnReply?: boolean;
   consentPhones?: ConsentWarning[];
 }
 
@@ -238,4 +365,7 @@ export interface YsrApi {
   disconnectRingCentral(): Promise<ActionResult>;
   simulateInbound(): Promise<ActionResult>;
   getPanelHint(): Promise<PanelId[]>;
+  refreshFacilities(): Promise<ActionResult>;
+  setFacilityPick(phone: string, facilityId: string | null): Promise<void>;
+  loadHistory(phone: string, cursor?: string | null): Promise<CustomerHistoryPage>;
 }

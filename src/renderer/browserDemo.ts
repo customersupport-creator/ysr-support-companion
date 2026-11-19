@@ -4,7 +4,7 @@ import { shouldAlertForWait } from "../core/alerts";
 import { toE164 } from "../core/format";
 import { BEETEXTING_HOME, RINGCENTRAL_WEB_SMS, beeTextingUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { DeskSession } from "../core/session";
-import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
+import { DEMO_BOOKINGS, DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
 import { PLAYBOOK_SOPS } from "../demo/playbookSops";
 
 /** In-browser stand-in so the desk can be tried without Electron. */
@@ -14,6 +14,7 @@ export function createBrowserDemo(): YsrApi {
     facilities: DEMO_FACILITIES,
     consent: [...DEMO_CONSENT],
   });
+  session.setBookings(DEMO_BOOKINGS);
   session.setMessages(buildDemoMessages(new Date()));
 
   let available = true;
@@ -22,6 +23,9 @@ export function createBrowserDemo(): YsrApi {
   let openNumbersIn: "beetexting" | "desktop" | "web" = "beetexting";
   let beeTextingTemplate = BEETEXTING_HOME;
   let urgentSound = true;
+  let showAccessCodes = false;
+  let transientHighValueOver = 15;
+  let autoResolveOnReply = true;
   let banner: string | null = "Demo mode. This desk does not send texts.";
   const alerted = new Set<string>();
   const listeners = new Set<(snapshot: AppSnapshot) => void>();
@@ -40,6 +44,12 @@ export function createBrowserDemo(): YsrApi {
     openNumbersIn,
     beeTextingTemplate,
     urgentSound,
+    showAccessCodes,
+    historyMonthlyTable: "MONTHLY",
+    historyLeaseTable: "Internal lease",
+    historyTransientTable: "TRANSIENT",
+    transientHighValueOver,
+    autoResolveOnReply,
     consentPhones: DEMO_CONSENT,
     secureStorage: false,
   });
@@ -61,6 +71,7 @@ export function createBrowserDemo(): YsrApi {
     resolvedToday: session.resolvedToday(),
     urgentItems: session.urgentItems(),
     unseenUrgentCount: session.unseenUrgentCount(),
+    facilities: session.listFacilities(),
     banner,
   });
 
@@ -191,6 +202,12 @@ export function createBrowserDemo(): YsrApi {
         beeTextingTemplate = patch.beeTextingTemplate.trim() || BEETEXTING_HOME;
       }
       if (patch.urgentSound != null) urgentSound = patch.urgentSound;
+      if (patch.showAccessCodes != null) showAccessCodes = patch.showAccessCodes;
+      if (patch.autoResolveOnReply != null) autoResolveOnReply = patch.autoResolveOnReply;
+      if (patch.transientHighValueOver != null && patch.transientHighValueOver >= 0) {
+        transientHighValueOver = patch.transientHighValueOver;
+        session.setValueThresholds({ transientBookings: transientHighValueOver });
+      }
       banner = "Browser demo keeps settings in this tab only.";
       emit();
       return { ok: true, message: banner };
@@ -205,6 +222,22 @@ export function createBrowserDemo(): YsrApi {
       session.upsertMessages([message]);
       return { ok: true, message: "Simulated a customer text that has been waiting 6 minutes." };
     },
-    getPanelHint: async () => ["queue", "thread", "settings"],
+    getPanelHint: async () => ["queue", "thread", "facilities", "settings"],
+    refreshFacilities: async () => ({ ok: true, message: "Demo facilities are loaded on this computer." }),
+    setFacilityPick: async (phone, facilityId) => {
+      session.setFacilityPick(phone, facilityId);
+    },
+    loadHistory: async (phone) => ({
+      phone,
+      messages: session.messagesFor(phone).map((message) => ({
+        id: message.id,
+        direction: message.direction,
+        body: message.body,
+        sentAt: message.sentAt,
+        agentName: message.direction === "outbound" ? "Avery" : "",
+      })),
+      nextCursor: null,
+      bookings: session.bookingsFor(phone),
+    }),
   };
 }

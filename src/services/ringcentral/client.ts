@@ -1,7 +1,7 @@
 import { GENERAL_LIMIT_PER_MIN, MESSAGE_STORE_LIMIT_PER_MIN } from "../../shared/constants";
 import { retryDelayMs, SlidingWindowLimiter } from "../../core/rateLimit";
 import { mapRcMessage } from "./mapMessage";
-import type { SmsMessage } from "../../shared/types";
+import type { HistoryMessage, SmsMessage } from "../../shared/types";
 
 export interface RcTokens {
   accessToken: string;
@@ -114,6 +114,52 @@ export class RingCentralClient {
       .map((record) => mapRcMessage(record))
       .filter((message): message is SmsMessage => message != null);
     return { messages, syncToken: json.syncInfo?.syncToken ?? null };
+  }
+
+  /** One page of SMS with this customer over the last year. Does not send. */
+  async listSmsForPhone(
+    phone: string,
+    dateFrom: string,
+    page: number,
+  ): Promise<{ messages: HistoryMessage[]; nextPage: number | null }> {
+    const params = new URLSearchParams({
+      messageType: "SMS",
+      phoneNumber: phone,
+      dateFrom,
+      perPage: "50",
+      page: String(Math.max(1, page)),
+    });
+    const response = await this.request("GET", `/restapi/v1.0/account/~/extension/~/message-store?${params.toString()}`);
+    if (!response.ok) throw new Error(`RingCentral message history failed (${response.status}).`);
+    const json = (await response.json()) as {
+      records?: Array<{
+        id?: string | number;
+        type?: string;
+        subject?: string;
+        direction?: string;
+        creationTime?: string;
+        from?: { phoneNumber?: string; name?: string };
+        to?: Array<{ phoneNumber?: string }>;
+        attachments?: Array<{ type?: string; content?: string }>;
+      }>;
+      paging?: { page?: number; totalPages?: number };
+    };
+    const messages: HistoryMessage[] = [];
+    for (const record of json.records ?? []) {
+      const mapped = mapRcMessage(record);
+      if (!mapped) continue;
+      const outbound = mapped.direction === "outbound";
+      messages.push({
+        id: mapped.id,
+        direction: mapped.direction,
+        body: mapped.body,
+        sentAt: mapped.sentAt,
+        agentName: outbound ? record.from?.name?.trim() || "" : "",
+      });
+    }
+    const current = json.paging?.page ?? page;
+    const total = json.paging?.totalPages ?? current;
+    return { messages, nextPage: current < total ? current + 1 : null };
   }
 
   private async tokenRequest(fields: Record<string, string>): Promise<RcTokens> {

@@ -6,6 +6,7 @@ import { createBrowserDemo } from "./browserDemo";
 import { deskPanels } from "./panels/registry";
 import { QueuePanel } from "./panels/QueuePanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import { FacilitiesPanel } from "./panels/FacilitiesPanel";
 import { ThreadPanel } from "./panels/ThreadPanel";
 
 async function resolveApi(): Promise<YsrApi> {
@@ -136,10 +137,12 @@ export function App() {
             onOpenNumber={(phone) => {
               void api.openNumber(phone).then((result) => setNote(result.message));
             }}
+            api={api}
           />
         ) : null}
         {panel === "thread" ? (
           <ThreadPanel
+            api={api}
             snap={snap}
             onCopy={async (id) => {
               await api.copyText(id);
@@ -155,6 +158,16 @@ export function App() {
                 setUndo({ phone, label });
                 setPanel("queue");
               });
+            }}
+          />
+        ) : null}
+        {panel === "facilities" ? (
+          <FacilitiesPanel
+            api={api}
+            snap={snap}
+            onNote={setNote}
+            onCopy={(text) => {
+              void api.copyText(text);
             }}
           />
         ) : null}

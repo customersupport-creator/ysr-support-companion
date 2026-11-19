@@ -12,7 +12,9 @@ export const GENERAL_LIMIT_PER_MIN = 40;
 
 export const RECONCILE_INTERVAL_MS = 60_000;
 export const SOP_REFRESH_INTERVAL_MS = 10 * 60_000;
+export const ACCESS_REFRESH_INTERVAL_MS = 30 * 60_000;
 export const ALERT_TICK_MS = 15_000;
+export const HISTORY_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
 
 /** One toast per number, and only after the customer has been waiting this long. */
 export const ALERT_AFTER_MS = 5 * 60_000;
@@ -24,6 +26,9 @@ export const AIRTABLE = {
   qaTableId: "tblRQ8J78nxmAbExM",
   facilityBaseId: "app9iYUN8J3z2wjXN",
   facilityTableId: "tblmun9KBYW4aYBe1",
+  monthlyTableId: "tblhJsSqzXe3LFopr",
+  leaseTableId: "tblI0tuTqt43sfPH2",
+  transientTableId: "tblPoNX9E3WSnsLyc",
 } as const;
 
 export const RC_SERVERS = {
@@ -31,5 +36,5 @@ export const RC_SERVERS = {
   sandbox: "https://platform.devtest.ringcentral.com",
 } as const;
 
-export const PANEL_IDS = ["queue", "thread", "settings"] as const;
+export const PANEL_IDS = ["queue", "thread", "facilities", "settings"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];

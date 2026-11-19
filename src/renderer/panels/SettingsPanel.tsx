@@ -37,6 +37,14 @@ export function SettingsPanel({
         />
         Windows toast once a number has been waiting 5 minutes
       </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.autoResolveOnReply}
+          onChange={(event) => void save({ autoResolveOnReply: event.target.checked })}
+        />
+        Auto-resolve when someone replies
+      </label>
       <label>
         Open numbers in
         <select
@@ -67,6 +75,44 @@ export function SettingsPanel({
           onChange={(event) => void save({ urgentSound: event.target.checked })}
         />
         Play a sound for new urgent threads when Available
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.showAccessCodes}
+          onChange={(event) => void save({ showAccessCodes: event.target.checked })}
+        />
+        Always show garage codes
+      </label>
+      <label>
+        Transient high value when past bookings are more than
+        <input
+          type="number"
+          min={0}
+          value={settings.transientHighValueOver}
+          onChange={(event) => void save({ transientHighValueOver: Number(event.target.value) })}
+        />
+      </label>
+      <p className="meta">
+        Active monthly and lease customers are high value. Everyone else is high value only when deduped bookings are greater than this number. 15 stays Regular. 16 is High value.
+      </p>
+      <label>
+        MONTHLY table
+        <input
+          value={settings.historyMonthlyTable}
+          onChange={(event) => void save({ historyMonthlyTable: event.target.value })}
+        />
+      </label>
+      <label>
+        Internal lease table
+        <input value={settings.historyLeaseTable} onChange={(event) => void save({ historyLeaseTable: event.target.value })} />
+      </label>
+      <label>
+        TRANSIENT table
+        <input
+          value={settings.historyTransientTable}
+          onChange={(event) => void save({ historyTransientTable: event.target.value })}
+        />
       </label>
       <label className="check">
         <input

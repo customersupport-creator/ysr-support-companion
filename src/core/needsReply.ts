@@ -1,9 +1,11 @@
 import type { QueueCard, ResolvedRecord, SmsMessage, Thread } from "../shared/types";
 import { attentionHeadline, formatPhoneDisplay, truncate } from "./format";
 import { isReactionMessage } from "./reactions";
+import { isGenuineAgentReply } from "./replies";
 import { extractRentalIds } from "./rentalIds";
 import { isResolvedForMessage } from "./resolved";
 import { classifyUrgency } from "./urgency";
+import { EMPTY_VALUE } from "./customerValue";
 
 export interface ReplyAssessment {
   message: SmsMessage;
@@ -33,9 +35,7 @@ export function assessNeedsReply(messages: SmsMessage[], nowMs: number): ReplyAs
   }
   if (!lastInbound) return null;
   const inboundAt = time(lastInbound.sentAt);
-  const replied = genuine.some(
-    (message) => message.direction === "outbound" && time(message.sentAt) > inboundAt,
-  );
+  const replied = messages.some((message) => isGenuineAgentReply(message) && time(message.sentAt) > inboundAt);
   if (replied) return null;
   return {
     message: lastInbound,
@@ -68,6 +68,11 @@ export function queueFromThreads(threads: Thread[], nowMs: number, resolved: Res
       rentalIds: extractRentalIds(thread.messages, thread.customerPhone),
       lastCustomerMessageId: assessment.message.id,
       key: `${thread.id}:${assessment.message.id}`,
+      facilityRecordId: null,
+      facilityName: null,
+      access: null,
+      issues: [],
+      value: EMPTY_VALUE,
     });
   }
   cards.sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] || b.waitMs - a.waitMs);

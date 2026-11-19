@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { app, safeStorage } from "electron";
+import { AIRTABLE } from "../shared/constants";
 import type { ConsentWarning, PublicSettings, ResolvedRecord, SettingsPatch, UrgentSeenRecord } from "../shared/types";
 
 interface FileShape {
@@ -13,6 +14,12 @@ interface FileShape {
   openNumbersIn: "beetexting" | "desktop" | "web";
   beeTextingTemplate: string;
   urgentSound: boolean;
+  showAccessCodes: boolean;
+  historyMonthlyTable: string;
+  historyLeaseTable: string;
+  historyTransientTable: string;
+  transientHighValueOver: number;
+  autoResolveOnReply: boolean;
   consentPhones: ConsentWarning[];
   sealed: Record<string, string>;
 }
@@ -39,6 +46,12 @@ function defaults(): FileShape {
     openNumbersIn: "beetexting",
     beeTextingTemplate: "https://app.beetexting.com/",
     urgentSound: true,
+    showAccessCodes: false,
+    historyMonthlyTable: AIRTABLE.monthlyTableId,
+    historyLeaseTable: AIRTABLE.leaseTableId,
+    historyTransientTable: AIRTABLE.transientTableId,
+    transientHighValueOver: 15,
+    autoResolveOnReply: true,
     consentPhones: [],
     sealed: {},
   };
@@ -74,6 +87,13 @@ export class SettingsStore {
       this.file.beeTextingTemplate = "https://app.beetexting.com/";
     }
     this.file.urgentSound = this.file.urgentSound !== false;
+    this.file.showAccessCodes = this.file.showAccessCodes === true;
+    this.file.historyMonthlyTable = this.file.historyMonthlyTable || AIRTABLE.monthlyTableId;
+    this.file.historyLeaseTable = this.file.historyLeaseTable || AIRTABLE.leaseTableId;
+    this.file.historyTransientTable = this.file.historyTransientTable || AIRTABLE.transientTableId;
+    const over = Number(this.file.transientHighValueOver);
+    this.file.transientHighValueOver = Number.isFinite(over) && over >= 0 ? over : 15;
+    this.file.autoResolveOnReply = this.file.autoResolveOnReply !== false;
     this.memorySecrets = emptySecrets();
     for (const key of SECRET_KEYS) this.memorySecrets[key] = unseal(this.file.sealed[key] ?? "");
     this.memorySecrets.rcAccessExpiresAt = Number(unseal(this.file.sealed.rcAccessExpiresAt ?? "") || "0");
@@ -97,6 +117,10 @@ export class SettingsStore {
 
   get urgentSound(): boolean {
     return this.file.urgentSound !== false;
+  }
+
+  get autoResolveOnReply(): boolean {
+    return this.file.autoResolveOnReply !== false;
   }
 
   set available(value: boolean) {
@@ -151,6 +175,12 @@ export class SettingsStore {
       openNumbersIn: this.file.openNumbersIn,
       beeTextingTemplate: this.file.beeTextingTemplate,
       urgentSound: this.file.urgentSound !== false,
+      showAccessCodes: this.file.showAccessCodes === true,
+      historyMonthlyTable: this.file.historyMonthlyTable || AIRTABLE.monthlyTableId,
+      historyLeaseTable: this.file.historyLeaseTable || AIRTABLE.leaseTableId,
+      historyTransientTable: this.file.historyTransientTable || AIRTABLE.transientTableId,
+      transientHighValueOver: this.file.transientHighValueOver ?? 15,
+      autoResolveOnReply: this.file.autoResolveOnReply !== false,
       consentPhones: this.file.consentPhones,
       secureStorage: this.secureStorageAvailable(),
     };
@@ -175,6 +205,14 @@ export class SettingsStore {
       this.file.beeTextingTemplate = patch.beeTextingTemplate.trim() || "https://app.beetexting.com/";
     }
     if (patch.urgentSound != null) this.file.urgentSound = patch.urgentSound;
+    if (patch.showAccessCodes != null) this.file.showAccessCodes = patch.showAccessCodes;
+    if (patch.historyMonthlyTable != null) this.file.historyMonthlyTable = patch.historyMonthlyTable.trim() || AIRTABLE.monthlyTableId;
+    if (patch.historyLeaseTable != null) this.file.historyLeaseTable = patch.historyLeaseTable.trim() || AIRTABLE.leaseTableId;
+    if (patch.historyTransientTable != null) this.file.historyTransientTable = patch.historyTransientTable.trim() || AIRTABLE.transientTableId;
+    if (patch.transientHighValueOver != null && Number.isFinite(patch.transientHighValueOver) && patch.transientHighValueOver >= 0) {
+      this.file.transientHighValueOver = patch.transientHighValueOver;
+    }
+    if (patch.autoResolveOnReply != null) this.file.autoResolveOnReply = patch.autoResolveOnReply;
     if (patch.consentPhones) this.file.consentPhones = patch.consentPhones.filter((item) => item.phone.trim());
     const secretError = this.applySecrets(patch);
     this.persist();
@@ -251,6 +289,25 @@ export class SettingsStore {
       this.file.sealed[key] = seal(value);
     }
     return "";
+  }
+
+  saveEncrypted(fileName: string, value: unknown): void {
+    if (!this.secureStorageAvailable()) return;
+    const target = path.join(app.getPath("userData"), fileName);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, JSON.stringify({ sealed: seal(JSON.stringify(value)) }), "utf8");
+  }
+
+  loadEncrypted<T>(fileName: string): T | null {
+    try {
+      const target = path.join(app.getPath("userData"), fileName);
+      const parsed = JSON.parse(fs.readFileSync(target, "utf8")) as { sealed?: string };
+      const raw = unseal(parsed.sealed ?? "");
+      if (!raw) return null;
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
   }
 
   private persist(): void {

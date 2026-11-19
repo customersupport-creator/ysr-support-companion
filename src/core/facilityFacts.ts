@@ -30,3 +30,25 @@ export function matchFacility(
   if (!best || best.score < 2) return null;
   return best.facility;
 }
+
+const STREET_NOISE = new Set(["spot", "only", "garage", "street", "north", "south", "east", "west", "the", "and", "lot", "ave", "avenue"]);
+
+/** Match a facility when the thread mentions its street number and name, or its address. */
+export function matchFacilityFromText(text: string, facilities: FacilityRecord[]): FacilityRecord | null {
+  const hay = text.toLowerCase();
+  let best: { facility: FacilityRecord; score: number } | null = null;
+  for (const facility of facilities) {
+    let score = 0;
+    const short = facility.name.split("-")[0]?.trim().toLowerCase() ?? "";
+    if (short.length > 4 && hay.includes(short)) score += 8;
+    const address = facility.address.toLowerCase();
+    const street = address.match(/\d+\s+[a-z0-9]+/);
+    if (street && hay.includes(street[0])) score += 6;
+    const number = facility.name.match(/\d+/);
+    const word = facility.name.toLowerCase().match(/[a-z]{4,}/g)?.find((token) => !STREET_NOISE.has(token));
+    if (number && word && hay.includes(number[0]) && hay.includes(word)) score += 5;
+    if (!best || score > best.score) best = { facility, score };
+  }
+  if (!best || best.score < 5) return null;
+  return best.facility;
+}

@@ -4,6 +4,7 @@ import { customerPhoneFor, toE164 } from "../../core/format";
 
 interface RcParty {
   phoneNumber?: string;
+  name?: string;
 }
 
 interface RcRecord {
@@ -12,6 +13,7 @@ interface RcRecord {
   subject?: string;
   direction?: string;
   creationTime?: string;
+  messageStatus?: string;
   from?: RcParty;
   to?: RcParty[];
   attachments?: Array<{ type?: string; content?: string }>;
@@ -43,6 +45,8 @@ export function mapRcMessage(value: unknown, source: SmsMessage["source"] = "rin
     fromPhone: from,
     toPhone: to,
     source,
+    messageStatus: record.messageStatus?.trim() || undefined,
+    agentName: direction === "outbound" ? record.from?.name?.trim() || undefined : undefined,
   };
 }
 

@@ -262,6 +262,37 @@ h2, h3 { font-size: 16px; margin: 0; color: var(--ysr-text); font-weight: 700; }
 }
 .badge.alert { background: var(--ysr-teal); }
 .card-top time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ysr-muted-strong); }
+.card-head, .issue-tags, .code-top, .code-line, .summary-row, .history-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.value-badge {
+  border-radius: 99px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--ysr-gray);
+  color: var(--ysr-text);
+}
+.value-badge.high { background: var(--ysr-tan); color: var(--ysr-text); }
+.value-badge.regular { background: var(--ysr-teal-10); color: var(--ysr-teal); }
+.value-badge.new { background: var(--ysr-white); border: 1px solid var(--ysr-border); }
+.issue {
+  border-radius: 99px;
+  background: var(--ysr-white);
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.issue.current { font-weight: 700; }
+.code-chip {
+  background: var(--ysr-tint);
+  border: 1px solid var(--ysr-teal);
+  border-radius: 10px;
+  padding: 8px;
+}
+.code-chip.warn { border-color: var(--ysr-urgent); }
+.code-digits { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: 0.08em; color: var(--ysr-text); }
+.warn-line { color: var(--ysr-urgent); font-weight: 700; margin: 0; }
+.facility-pick { display: flex; flex-direction: column; gap: 4px; }
+.history summary { font-weight: 700; }
+.summary-row { color: var(--ysr-text-secondary); font-size: 13px; }
 
 .texty {
   border: 0;

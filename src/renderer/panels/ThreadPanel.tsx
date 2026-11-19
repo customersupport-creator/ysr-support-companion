@@ -1,15 +1,18 @@
-import type { AppSnapshot } from "../../shared/types";
+import type { AppSnapshot, YsrApi } from "../../shared/types";
 import { extractFacilityFacts } from "../../core/facilityFacts";
 import { formatWait } from "../../core/format";
 import { openActionLabel } from "../../core/ringcentralLink";
+import { AccessChip, CustomerHistory, FacilityPicker, IssueTags, ValueBadge } from "../components/CustomerContext";
 import { RentalChips } from "../components/RentalChips";
 
 export function ThreadPanel({
+  api,
   snap,
   onResolve,
   onCopy,
   onOpenNumber,
 }: {
+  api: YsrApi;
   snap: AppSnapshot;
   onResolve: (threadId: string) => void;
   onCopy: (id: string) => Promise<void> | void;
@@ -34,6 +37,8 @@ export function ThreadPanel({
         </h2>
         {thread.card ? (
           <p>
+            <ValueBadge value={thread.card.value} />
+            <IssueTags issues={thread.card.issues} />
             <b className={`urgency inline ${thread.card.urgency.toLowerCase()}`}>{thread.card.urgency}</b>
             {thread.card.urgent ? <b className="badge">URGENT</b> : null}
             <span> waiting {formatWait(Date.now() - Date.parse(thread.card.waitingSince))}</span>
@@ -91,11 +96,28 @@ export function ThreadPanel({
             {thread.facility.salesTowAuthorization ? ` · Sales tow: ${thread.facility.salesTowAuthorization}` : ""}
           </p>
           {thread.facility.doNotTowPlates ? <p className="meta">Do not tow: {thread.facility.doNotTowPlates}</p> : null}
-          {facts.gateCode ? <p>Gate code on file: {facts.gateCode}</p> : null}
           {facts.sizeLimit ? <p>Size limit: {facts.sizeLimit}</p> : null}
           {facts.directions ? <p>Directions: {facts.directions}</p> : null}
-          {thread.facility.notes ? <p className="notes">{thread.facility.notes}</p> : null}
         </div>
+      ) : null}
+      {thread.card?.access ? (
+        <AccessChip access={thread.card.access} alwaysShow={snap.settings.showAccessCodes} onCopy={(code) => void onCopy(code)} />
+      ) : null}
+      <FacilityPicker
+        facilities={snap.facilities}
+        selectedId={thread.card?.facilityRecordId ?? thread.facility?.id ?? null}
+        onPick={(facilityId) => void api.setFacilityPick(thread.customerPhone, facilityId)}
+      />
+      {thread.card ? (
+        <CustomerHistory
+          phone={thread.customerPhone}
+          api={api}
+          issues={thread.card.issues}
+          value={thread.card.value}
+          facilities={snap.facilities}
+          onCopy={(code) => void onCopy(code)}
+          onUseFacility={(facilityId) => void api.setFacilityPick(thread.customerPhone, facilityId)}
+        />
       ) : null}
       <h3>Matched SOPs</h3>
       {thread.matchedSops.length === 0 ? <p className="empty">No SOP keyword match on the latest customer texts.</p> : null}

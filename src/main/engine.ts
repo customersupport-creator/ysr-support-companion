@@ -1,16 +1,16 @@
 import fs from "fs";
 import path from "path";
 import { BrowserWindow, NativeImage, Notification, clipboard, nativeImage, shell } from "electron";
-import { ALERT_TICK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS } from "../shared/constants";
-import type { ActionResult, AppSnapshot, SettingsPatch, SmsMessage } from "../shared/types";
+import { ACCESS_REFRESH_INTERVAL_MS, ALERT_TICK_MS, HISTORY_LOOKBACK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS, SUPPORT_LINE_E164 } from "../shared/constants";
+import type { ActionResult, AppSnapshot, CustomerHistoryPage, FacilityListItem, FacilityRecord, HistoryMessage, SettingsPatch, SmsMessage, ThreadView } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
-import { attentionNotice } from "../core/rentalIds";
+import { attentionNotice, extractRentalIds } from "../core/rentalIds";
 import { urgentTitle } from "../core/urgentBell";
 import { toE164 } from "../core/format";
 import { RINGCENTRAL_WEB_SMS, assertAllowedExternalUrl, beeTextingUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { isStopKeyword } from "../core/safety";
 import { DeskSession } from "../core/session";
-import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
+import { DEMO_BOOKINGS, DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
 import { PLAYBOOK_SOPS } from "../demo/playbookSops";
 import { AirtableClient } from "../services/airtable/client";
 import { RingCentralClient } from "../services/ringcentral/client";
@@ -27,6 +27,8 @@ export class DeskEngine {
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private alertTimer: ReturnType<typeof setInterval> | null = null;
+  private accessTimer: ReturnType<typeof setInterval> | null = null;
+  private historyCache = new Map<string, { at: number; page: CustomerHistoryPage }>();
   private syncToken: string | null = null;
   private alertedPhones = new Set<string>();
   private alertedUrgent = new Set<string>();
@@ -89,10 +91,11 @@ export class DeskEngine {
       queue: this.session.queue(),
       flagged: this.session.flagged(),
       selectedThreadId: this.session.selectedId,
-      thread: this.session.threadView(),
+      thread: hideFacilityNotes(this.session.threadView()),
       resolvedToday: this.session.resolvedToday(),
       urgentItems: this.session.urgentItems(),
       unseenUrgentCount: this.session.unseenUrgentCount(),
+      facilities: this.session.listFacilities(),
       banner: this.banner,
     };
   }
@@ -187,6 +190,7 @@ export class DeskEngine {
     }
     if (patch.airtableToken || patch.clearAirtableToken) this.airtable = null;
     if (patch.consentPhones || modeChanged) this.session.setConsent(this.currentConsent());
+    this.session.setValueThresholds({ transientBookings: this.store.toPublic(this.loggedIn).transientHighValueOver });
     if (modeChanged || patch.rcJwt || patch.rcClientSecret || patch.airtableToken) await this.applyMode();
     this.broadcast();
     return result;
@@ -253,6 +257,95 @@ export class DeskEngine {
     return { ok: true, message: "Signed out." };
   }
 
+  async refreshFacilities(): Promise<ActionResult> {
+    if (this.store.demoMode) {
+      this.session.setFacilities(DEMO_FACILITIES);
+      this.session.setBookings(DEMO_BOOKINGS);
+      this.broadcast();
+      return { ok: true, message: "Demo facilities are loaded on this computer." };
+    }
+    if (!this.store.secrets.airtableToken) {
+      return { ok: false, message: "Add an Airtable token to refresh facility codes." };
+    }
+    try {
+      const facilities = await this.airtableClient().listFacilities();
+      this.session.setFacilities(facilities);
+      this.store.saveEncrypted("access-cache.json", this.session.listFacilities());
+      this.airtableState = "connected";
+      this.airtableDetail = `${facilities.length} facilities. Parsed codes are encrypted on this computer.`;
+      this.broadcast();
+      return { ok: true, message: `Refreshed ${facilities.length} facilities.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Facility refresh failed.";
+      this.airtableState = "error";
+      this.airtableDetail = message;
+      this.broadcast();
+      return { ok: false, message };
+    }
+  }
+
+  setFacilityPick(phone: string, facilityId: string | null): void {
+    this.session.setFacilityPick(phone, facilityId);
+  }
+
+  async loadHistory(phone: string, cursor?: string | null): Promise<CustomerHistoryPage> {
+    const key = toE164(phone);
+    if (this.store.demoMode) return this.demoHistory(key);
+    const pageNumber = Number(cursor || "1") || 1;
+    const cached = this.historyCache.get(key);
+    if (pageNumber === 1 && cached && Date.now() - cached.at < ACCESS_REFRESH_INTERVAL_MS) return cached.page;
+    const dateFrom = new Date(Date.now() - HISTORY_LOOKBACK_MS).toISOString();
+    let messages: HistoryMessage[] = [];
+    let nextCursor: string | null = null;
+    if (this.rc) {
+      const listed = await this.rc.listSmsForPhone(key, dateFrom, pageNumber);
+      messages = listed.messages;
+      nextCursor = listed.nextPage ? String(listed.nextPage) : null;
+      this.ingest(messages.map((message) => historyToSms(key, message)));
+    }
+    if (pageNumber > 1 && cached) {
+      messages = [...cached.page.messages, ...messages];
+    }
+    if (pageNumber === 1 && this.store.secrets.airtableToken) {
+      const names = new Map(this.session.listFacilities().map((item) => [item.id, item.name]));
+      const ids = extractRentalIds(this.session.messagesFor(key), key);
+      await this.airtableClient().listCustomerBookings({
+        phone: key,
+        rentalIds: ids,
+        monthlyTable: this.store.toPublic(this.loggedIn).historyMonthlyTable,
+        leaseTable: this.store.toPublic(this.loggedIn).historyLeaseTable,
+        transientTable: this.store.toPublic(this.loggedIn).historyTransientTable,
+        facilityNames: names,
+      }).then((rows) => this.session.addBookings(rows));
+    }
+    const page: CustomerHistoryPage = { phone: key, messages, nextCursor, bookings: this.session.bookingsFor(key) };
+    this.historyCache.set(key, { at: Date.now(), page });
+    this.store.saveEncrypted("history-cache.json", Object.fromEntries([...this.historyCache].map(([id, entry]) => [id, entry.page])));
+    this.broadcast();
+    return page;
+  }
+
+  private demoHistory(phone: string): CustomerHistoryPage {
+    return {
+      phone,
+      messages: this.session.messagesFor(phone).map((message) => ({
+        id: message.id,
+        direction: message.direction,
+        body: message.body,
+        sentAt: message.sentAt,
+        agentName: message.direction === "outbound" ? "Avery" : "",
+      })),
+      nextCursor: null,
+      bookings: this.session.bookingsFor(phone),
+    };
+  }
+
+  private restoreAccessCache(): void {
+    const cached = this.store.loadEncrypted<FacilityListItem[]>("access-cache.json");
+    if (!cached?.length) return;
+    this.session.setFacilities(cached.map(facilityFromCache));
+  }
+
   async simulateInbound(): Promise<ActionResult> {
     if (!this.store.demoMode) return { ok: false, message: "Simulate is only available in demo mode." };
     const message = simulatedInbound(new Date());
@@ -270,6 +363,8 @@ export class DeskEngine {
     if (this.store.demoMode) {
       this.session.setSops(PLAYBOOK_SOPS);
       this.session.setFacilities(DEMO_FACILITIES);
+      this.session.setBookings(DEMO_BOOKINGS);
+      this.session.setValueThresholds({ transientBookings: this.store.toPublic(false).transientHighValueOver });
       this.session.setMessages(buildDemoMessages(new Date()));
       this.rcState = "demo";
       this.rcDetail = "Demo mode is on. No credentials are used, and nothing is sent.";
@@ -293,9 +388,12 @@ export class DeskEngine {
       this.syncToken = synced.syncToken;
       this.ingest(synced.messages);
       this.startStream();
+      this.restoreAccessCache();
       await this.refreshReference();
+      await this.refreshFacilities();
       this.reconcileTimer = setInterval(() => void this.reconcile(), RECONCILE_INTERVAL_MS);
       this.refreshTimer = setInterval(() => void this.refreshReference(), SOP_REFRESH_INTERVAL_MS);
+      this.accessTimer = setInterval(() => void this.refreshFacilities(), ACCESS_REFRESH_INTERVAL_MS);
     } catch (error) {
       this.loggedIn = false;
       this.rcState = "error";
@@ -328,8 +426,10 @@ export class DeskEngine {
   private stopLive(): void {
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.accessTimer) clearInterval(this.accessTimer);
     this.reconcileTimer = null;
     this.refreshTimer = null;
+    this.accessTimer = null;
     this.stream?.stop();
     this.stream = null;
     this.syncToken = null;
@@ -361,11 +461,10 @@ export class DeskEngine {
     }
     try {
       const client = this.airtableClient();
-      const [sops, facilities] = await Promise.all([client.listSops(), client.listFacilities()]);
+      const sops = await client.listSops();
       this.session.setSops(sops.length ? sops : PLAYBOOK_SOPS);
-      this.session.setFacilities(facilities);
       this.airtableState = "connected";
-      this.airtableDetail = `${sops.length} SOPs, ${facilities.length} facilities. Read only.`;
+      this.airtableDetail = `${sops.length} SOPs. Read only.`;
       const extra = await client.listRecentMessages(2);
       if (extra.length) this.ingest(extra);
     } catch (error) {
@@ -390,7 +489,19 @@ export class DeskEngine {
       this.store.update({ consentPhones: next });
       this.session.setConsent(this.currentConsent());
     }
+    const waiting = new Map(this.session.queue().map((card) => [toE164(card.customerPhone), card.lastCustomerMessageId]));
     this.session.upsertMessages(messages);
+    if (!this.store.autoResolveOnReply || this.suppressNotify) return;
+    const resolved = this.session.autoResolveReplies(waiting);
+    if (!resolved.length) return;
+    this.store.saveResolved(this.session.getResolved());
+    for (const record of resolved) {
+      this.alertedPhones.delete(toE164(record.phone));
+      for (const key of this.alertedUrgent) {
+        if (key.startsWith(`${toE164(record.phone)}:`)) this.alertedUrgent.delete(key);
+      }
+    }
+    this.syncTaskbar();
   }
 
   private async ensureClient(login: boolean): Promise<RingCentralClient> {
@@ -510,6 +621,47 @@ export class DeskEngine {
       if (!win.isDestroyed()) win.webContents.send("ysr:snapshot", snapshot);
     }
   }
+}
+
+function historyToSms(phone: string, message: HistoryMessage): SmsMessage {
+  return {
+    id: message.id,
+    threadId: phone,
+    direction: message.direction,
+    body: message.body,
+    sentAt: message.sentAt,
+    fromPhone: message.direction === "outbound" ? SUPPORT_LINE_E164 : phone,
+    toPhone: message.direction === "outbound" ? phone : SUPPORT_LINE_E164,
+    source: "ringcentral",
+  };
+}
+
+function hideFacilityNotes(view: ThreadView | null): ThreadView | null {
+  if (!view?.facility) return view;
+  return { ...view, facility: { ...view.facility, notes: "" } };
+}
+
+function facilityFromCache(item: FacilityListItem): FacilityRecord {
+  return {
+    id: item.id,
+    name: item.name,
+    address: item.address,
+    facilityId: "",
+    status: item.status,
+    notes: "",
+    gps: "",
+    stallCount: null,
+    stallsByPlatform: "",
+    towingCompany: "",
+    salesTowAuthorization: "",
+    landlord: "",
+    doNotTowPlates: "",
+    doNotTowVehicles: "",
+    contactPerson: "",
+    phone: "",
+    email: "",
+    access: item.access,
+  };
 }
 
 let overlayImage: NativeImage | null = null;

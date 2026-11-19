@@ -91,6 +91,15 @@ app.whenReady().then(async () => {
   ipcMain.handle("ysr:disconnect", () => engine.disconnectRingCentral());
   ipcMain.handle("ysr:simulate", () => engine.simulateInbound());
   ipcMain.handle("ysr:panels", () => panelIds());
+  ipcMain.handle("ysr:refresh-facilities", () => engine.refreshFacilities());
+  ipcMain.handle("ysr:set-facility", (_event, phone: string, facilityId: string | null) => {
+    if (typeof phone !== "string") return;
+    engine.setFacilityPick(phone, typeof facilityId === "string" ? facilityId : null);
+  });
+  ipcMain.handle("ysr:load-history", (_event, phone: string, cursor?: string | null) => {
+    if (typeof phone !== "string") return { phone: "", messages: [], nextCursor: null, bookings: [] };
+    return engine.loadHistory(phone, cursor);
+  });
 
   app.on("second-instance", () => show());
   app.on("before-quit", () => {

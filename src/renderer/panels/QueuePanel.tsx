@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import type { AppSnapshot, QueueCard } from "../../shared/types";
+import type { AppSnapshot, QueueCard, YsrApi } from "../../shared/types";
 import { shouldAlertForWait } from "../../core/alerts";
 import { formatPhoneDisplay, formatWait } from "../../core/format";
+import { resolvedLabel } from "../../core/replies";
 import { openActionLabel } from "../../core/ringcentralLink";
+import { AccessChip, CustomerHistory, FacilityPicker, IssueTags, ValueBadge } from "../components/CustomerContext";
 import { RentalChips } from "../components/RentalChips";
 
 export function QueuePanel({
@@ -13,6 +15,7 @@ export function QueuePanel({
   onUnresolve,
   onCopy,
   onOpenNumber,
+  api,
 }: {
   snap: AppSnapshot;
   onOpen: (threadId: string) => void;
@@ -21,13 +24,21 @@ export function QueuePanel({
   onUnresolve: (phone: string) => void;
   onCopy: (id: string) => Promise<void> | void;
   onOpenNumber: (phone: string) => void;
+  api: YsrApi;
 }) {
   const now = useNow();
+  const [priority, setPriority] = useState(false);
   const openLabel = openActionLabel(snap.settings.openNumbersIn);
+  const cards = priority
+    ? [...snap.queue].sort((a, b) => rank(a) - rank(b) || b.waitMs - a.waitMs)
+    : snap.queue;
   return (
     <section className="panel">
       <div className="panel-head">
         <h2>Needs a reply</h2>
+        <button type="button" className="texty" onClick={() => setPriority((value) => !value)}>
+          {priority ? "Sort by wait" : "High value and urgent first"}
+        </button>
         {snap.connection.mode === "demo" ? (
           <button type="button" className="texty" onClick={onSimulate}>
             Simulate new text
@@ -37,10 +48,12 @@ export function QueuePanel({
       <p className="meta">One alert per number, once the customer has been waiting 5 minutes.</p>
       {snap.queue.length === 0 ? <p className="empty">Nobody is waiting. New customer texts show up here.</p> : null}
       <ul className="cards">
-        {snap.queue.map((card) => (
+        {cards.map((card) => (
           <li key={card.key}>
             <Card
               card={card}
+              snap={snap}
+              api={api}
               now={now}
               openLabel={openLabel}
               onOpen={onOpen}
@@ -72,8 +85,15 @@ export function QueuePanel({
   );
 }
 
+function rank(card: QueueCard): number {
+  const tier = card.value.tier === "high" ? 0 : card.value.tier === "regular" ? 1 : 2;
+  return (card.urgent ? 0 : 10) + tier;
+}
+
 function Card({
   card,
+  snap,
+  api,
   now,
   onOpen,
   onResolve,
@@ -82,6 +102,8 @@ function Card({
   openLabel,
 }: {
   card: QueueCard;
+  snap: AppSnapshot;
+  api: YsrApi;
   now: number;
   openLabel: string;
   onOpen: (id: string) => void;
@@ -93,6 +115,10 @@ function Card({
   const ready = shouldAlertForWait(now - Date.parse(card.waitingSince));
   return (
     <article className={`card ${card.urgency.toLowerCase()}`}>
+      <div className="card-head">
+        <ValueBadge value={card.value} />
+        <IssueTags issues={card.issues} />
+      </div>
       <p className="headline">
         Hey, number{" "}
         <button type="button" className="phone-link" onClick={() => onOpenNumber(card.customerPhone)}>
@@ -110,6 +136,23 @@ function Card({
         <q>{card.preview}</q>
         <span className="reasons">{card.reasons.join(" · ")}</span>
       </button>
+      {card.access ? (
+        <AccessChip access={card.access} alwaysShow={snap.settings.showAccessCodes} onCopy={(code) => void onCopy(code)} />
+      ) : null}
+      <FacilityPicker
+        facilities={snap.facilities}
+        selectedId={card.facilityRecordId}
+        onPick={(facilityId) => void api.setFacilityPick(card.customerPhone, facilityId)}
+      />
+      <CustomerHistory
+        phone={card.customerPhone}
+        api={api}
+        issues={card.issues}
+        value={card.value}
+        facilities={snap.facilities}
+        onCopy={(code) => void onCopy(code)}
+        onUseFacility={(facilityId) => void api.setFacilityPick(card.customerPhone, facilityId)}
+      />
       <div className="card-foot">
         <RentalChips ids={card.rentalIds} onCopy={onCopy} />
         <span className="card-actions">
@@ -134,7 +177,10 @@ function ResolvedToday({ snap, onUnresolve }: { snap: AppSnapshot; onUnresolve: 
       <ul className="cards">
         {snap.resolvedToday.map((record) => (
           <li key={record.phone} className="resolved-row">
-            <span>{formatPhoneDisplay(record.phone)}</span>
+            <span>
+              {formatPhoneDisplay(record.phone)}
+              <span className="meta"> {resolvedLabel(record)}</span>
+            </span>
             <button type="button" onClick={() => onUnresolve(record.phone)}>
               Undo
             </button>

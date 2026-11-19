@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ActionResult, AppSnapshot, SettingsPatch, YsrApi } from "../shared/types";
+import type { ActionResult, AppSnapshot, CustomerHistoryPage, SettingsPatch, YsrApi } from "../shared/types";
 import type { PanelId } from "../shared/constants";
 
 const api: YsrApi = {
@@ -29,6 +29,9 @@ const api: YsrApi = {
   disconnectRingCentral: () => ipcRenderer.invoke("ysr:disconnect") as Promise<ActionResult>,
   simulateInbound: () => ipcRenderer.invoke("ysr:simulate") as Promise<ActionResult>,
   getPanelHint: () => ipcRenderer.invoke("ysr:panels") as Promise<PanelId[]>,
+  refreshFacilities: () => ipcRenderer.invoke("ysr:refresh-facilities") as Promise<ActionResult>,
+  setFacilityPick: (phone, facilityId) => ipcRenderer.invoke("ysr:set-facility", phone, facilityId) as Promise<void>,
+  loadHistory: (phone, cursor) => ipcRenderer.invoke("ysr:load-history", phone, cursor ?? null) as Promise<CustomerHistoryPage>,
 };
 
 contextBridge.exposeInMainWorld("ysr", api);
