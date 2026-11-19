@@ -12,6 +12,12 @@ export const DEMO_PHONES = {
   spothero: "+13125550166",
   extension: "+17735550999",
   answered: "+13125550001",
+  followUp: "+13125550222",
+  endorse: "+13125550223",
+  refundOld: "+17735550111",
+  refundSent: "+17735550112",
+  alertA: "+13125550301",
+  alertB: "+13125550302",
 } as const;
 
 export const DEMO_CONSENT: ConsentWarning[] = [
@@ -196,6 +202,14 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
   const spothero = DEMO_PHONES.spothero;
   const extension = DEMO_PHONES.extension;
   const answered = DEMO_PHONES.answered;
+  const followUp = DEMO_PHONES.followUp;
+  const endorse = DEMO_PHONES.endorse;
+  const checking = sms("fu-out", followUp, "outbound", "Checking on it. I'll update you.", at(20));
+  checking.agentName = "Avery";
+  const endorsing = sms("en-out", endorse, "outbound", "I will endorse this for a refund.", at(10));
+  endorsing.agentName = "Avery";
+  const refundSent = sms("refund-sent", DEMO_PHONES.refundSent, "outbound", "Your refund was sent.", at(3 * 24 * 60));
+  refundSent.agentName = "Avery";
 
   return [
     sms("taken-res", taken, "inbound", reservation(now, "17 Raymond St", "136244125", "M4PL8", "Sam"), at(40)),
@@ -249,6 +263,15 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
     sms("ans-a", answered, "outbound", "Spots 4 or 5 only. Directions: https://yourspotrented.com/d/ray17", at(55)),
     sms("ans-thanks", answered, "inbound", "Thanks!", at(54)),
     sms("ans-close", answered, "outbound", "You're welcome! If you need anything else, just let us know. Have a great day!", at(53)),
+    sms("fu-in", followUp, "inbound", "Any update on the gate?", at(40)),
+    checking,
+    sms("en-in", endorse, "inbound", "Can I get a refund for this reservation? Name: Pat", at(30)),
+    endorsing,
+    sms("refund-old-ask", DEMO_PHONES.refundOld, "inbound", "Please refund $18 to Zelle. Name: Pat", at(50 * 60)),
+    sms("refund-sent-ask", DEMO_PHONES.refundSent, "inbound", "I need a refund for rental 136200111.", at(4 * 24 * 60)),
+    refundSent,
+    sms("alert-a", DEMO_PHONES.alertA, "inbound", "The gate code isn't working at 17 Raymond and I can't get in.", at(50)),
+    sms("alert-b", DEMO_PHONES.alertB, "inbound", "Can't get in at 17 Raymond. The keypad won't open.", at(40)),
   ];
 }
 

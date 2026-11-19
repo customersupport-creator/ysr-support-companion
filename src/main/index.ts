@@ -96,6 +96,13 @@ app.whenReady().then(async () => {
     if (typeof phone !== "string") return;
     engine.setFacilityPick(phone, typeof facilityId === "string" ? facilityId : null);
   });
+  ipcMain.handle("ysr:snooze-follow-up", (_event, id: string, minutes: number) => engine.snoozeFollowUp(id, Number(minutes)));
+  ipcMain.handle("ysr:complete-follow-up", (_event, id: string) => engine.completeFollowUp(id));
+  ipcMain.handle("ysr:update-commitment", (_event, id: string, status: "open" | "waiting" | "done", note: string) =>
+    engine.updateCommitment(id, status, typeof note === "string" ? note : ""),
+  );
+  ipcMain.handle("ysr:dismiss-alert", (_event, id: string) => engine.dismissFacilityAlert(id));
+  ipcMain.handle("ysr:commitment-csv", () => engine.commitmentCsv());
   ipcMain.handle("ysr:load-history", (_event, phone: string, cursor?: string | null) => {
     if (typeof phone !== "string") return { phone: "", messages: [], nextCursor: null, bookings: [] };
     return engine.loadHistory(phone, cursor);

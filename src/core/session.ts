@@ -1,9 +1,14 @@
 import type {
+  AlertDismissal,
   Booking,
+  CommitmentOverride,
+  CommitmentStatus,
   ConsentWarning,
+  FacilityAlertItem,
   FacilityListItem,
   FacilityRecord,
   FlaggedCard,
+  FollowUpOverride,
   QueueCard,
   ResolvedRecord,
   SmsMessage,
@@ -13,6 +18,9 @@ import type {
   Thread,
   ThreadView,
 } from "../shared/types";
+import { buildFacilityAlerts } from "./facilityAlerts";
+import { openFollowUps } from "./followUps";
+import { commitmentsToCsv, findCommitments } from "./commitments";
 import { buildCardContext, facilityList } from "./cardContext";
 import { DEFAULT_VALUE_THRESHOLDS, type ValueThresholds } from "./customerValue";
 import { formatPhoneDisplay, toE164 } from "./format";
@@ -47,6 +55,14 @@ export class DeskSession {
   private bookings: Booking[] = [];
   private picks = new Map<string, string>();
   private thresholds: ValueThresholds = { ...DEFAULT_VALUE_THRESHOLDS };
+  private followUpOverrides: FollowUpOverride[] = [];
+  private commitmentOverrides: CommitmentOverride[] = [];
+  private alertDismissals: AlertDismissal[] = [];
+  private alertHistory: FacilityAlertItem[] = [];
+  private followUpMinutes = 15;
+  private endorseFollowUpMinutes = 30;
+  private facilityAlertCustomers = 3;
+  private facilityAlertHours = 3;
   private readonly now: () => Date;
 
   constructor(options: SessionOptions = {}) {
@@ -113,6 +129,127 @@ export class DeskSession {
   setValueThresholds(thresholds: Partial<ValueThresholds>): void {
     this.thresholds = { ...this.thresholds, ...thresholds };
     this.emit();
+  }
+
+  setOpsSettings(input: {
+    followUpMinutes?: number;
+    endorseFollowUpMinutes?: number;
+    facilityAlertCustomers?: number;
+    facilityAlertHours?: number;
+  }): void {
+    if (input.followUpMinutes != null) this.followUpMinutes = input.followUpMinutes;
+    if (input.endorseFollowUpMinutes != null) this.endorseFollowUpMinutes = input.endorseFollowUpMinutes;
+    if (input.facilityAlertCustomers != null) this.facilityAlertCustomers = input.facilityAlertCustomers;
+    if (input.facilityAlertHours != null) this.facilityAlertHours = input.facilityAlertHours;
+    this.emit();
+  }
+
+  loadOps(input: {
+    followUps?: FollowUpOverride[];
+    commitments?: CommitmentOverride[];
+    dismissals?: AlertDismissal[];
+    history?: FacilityAlertItem[];
+  }): void {
+    this.followUpOverrides = input.followUps ?? [];
+    this.commitmentOverrides = input.commitments ?? [];
+    this.alertDismissals = input.dismissals ?? [];
+    this.alertHistory = input.history ?? [];
+    this.emit();
+  }
+
+  opsState(): {
+    followUps: FollowUpOverride[];
+    commitments: CommitmentOverride[];
+    dismissals: AlertDismissal[];
+    history: FacilityAlertItem[];
+  } {
+    return {
+      followUps: this.followUpOverrides,
+      commitments: this.commitmentOverrides,
+      dismissals: this.alertDismissals,
+      history: this.alertHistory,
+    };
+  }
+
+  followUps() {
+    const manual = new Set(
+      this.resolvedToday()
+        .filter((record) => record.kind !== "auto")
+        .map((record) => toE164(record.phone)),
+    );
+    return openFollowUps({
+      threads: this.threads.map((thread) => ({ phone: thread.customerPhone, messages: thread.messages })),
+      now: this.now(),
+      standardMinutes: this.followUpMinutes,
+      endorseMinutes: this.endorseFollowUpMinutes,
+      overrides: this.followUpOverrides,
+      manuallyResolvedPhones: manual,
+    });
+  }
+
+  commitments() {
+    return findCommitments({
+      threads: this.threadFacts(),
+      now: this.now(),
+      overrides: this.commitmentOverrides,
+    });
+  }
+
+  facilityAlerts() {
+    return buildFacilityAlerts({
+      threads: this.threadFacts(),
+      now: this.now(),
+      customers: this.facilityAlertCustomers,
+      windowHours: this.facilityAlertHours,
+      dismissals: this.alertDismissals,
+    }).active;
+  }
+
+  facilityIssueCounts() {
+    return buildFacilityAlerts({
+      threads: this.threadFacts(),
+      now: this.now(),
+      customers: this.facilityAlertCustomers,
+      windowHours: this.facilityAlertHours,
+      dismissals: this.alertDismissals,
+    }).counts;
+  }
+
+  facilityAlertHistory(): FacilityAlertItem[] {
+    const week = this.now().getTime() - 7 * 24 * 60 * 60 * 1000;
+    return this.alertHistory.filter((item) => Date.parse(item.newestAt) >= week);
+  }
+
+  snoozeFollowUp(id: string, minutes: number): void {
+    const until = new Date(this.now().getTime() + minutes * 60_000).toISOString();
+    this.followUpOverrides = this.followUpOverrides.filter((item) => item.id !== id).concat({ id, snoozeUntil: until });
+    this.emit();
+  }
+
+  completeFollowUp(id: string): void {
+    this.followUpOverrides = this.followUpOverrides.filter((item) => item.id !== id).concat({ id, doneAt: this.now().toISOString() });
+    this.emit();
+  }
+
+  updateCommitment(id: string, status: CommitmentStatus, note: string): void {
+    this.commitmentOverrides = this.commitmentOverrides.filter((item) => item.id !== id).concat({ id, status, note });
+    this.emit();
+  }
+
+  dismissFacilityAlert(id: string): void {
+    const alert = this.facilityAlerts().find((item) => item.id === id);
+    if (!alert) return;
+    this.alertDismissals = this.alertDismissals.filter((item) => item.id !== id).concat({
+      id,
+      messageIds: alert.customers.map((customer) => customer.messageId),
+      at: this.now().toISOString(),
+    });
+    this.alertHistory = [alert, ...this.alertHistory].slice(0, 40);
+    this.emit();
+  }
+
+  commitmentCsv(): string {
+    return commitmentsToCsv(this.commitments());
   }
 
   setFacilityPick(phone: string, facilityId: string | null): void {
@@ -270,6 +407,19 @@ export class DeskSession {
       facility,
       matchedSops: matchSops(thread.messages, this.sops),
     };
+  }
+
+  private threadFacts() {
+    return this.threads.map((thread) => {
+      const context = this.contextFor(thread);
+      return {
+        phone: thread.customerPhone,
+        messages: thread.messages,
+        facilityName: context.facilityName ?? "",
+        facilityRecordId: context.facilityRecordId,
+        access: context.access,
+      };
+    });
   }
 
   private contextFor(thread: Thread) {

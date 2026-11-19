@@ -20,7 +20,8 @@ export function UrgentBell({
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const previous = useRef<number | null>(null);
-  const count = snap.unseenUrgentCount;
+  const facilityUrgent = snap.facilityAlerts.filter((alert) => alert.urgent);
+  const count = snap.unseenUrgentCount + facilityUrgent.length;
   const label = openActionLabel(snap.settings.openNumbersIn);
 
   useEffect(() => {
@@ -74,7 +75,12 @@ export function UrgentBell({
               Mark seen
             </button>
           </div>
-          {snap.urgentItems.length === 0 ? <p className="empty">No unresolved urgent threads.</p> : null}
+          {facilityUrgent.map((alert) => (
+            <p key={alert.id} className="warn-line">
+              {alert.toast}
+            </p>
+          ))}
+          {snap.urgentItems.length === 0 && facilityUrgent.length === 0 ? <p className="empty">No unresolved urgent threads.</p> : null}
           <ul>
             {snap.urgentItems.map((item) => (
               <li key={item.threadId} className={item.unseen ? "unseen" : ""}>

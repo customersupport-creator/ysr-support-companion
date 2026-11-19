@@ -118,6 +118,9 @@ function Card({
       <div className="card-head">
         <ValueBadge value={card.value} />
         <IssueTags issues={card.issues} />
+        {snap.followUps.some((item) => item.phone === card.customerPhone && item.state === "due") ? (
+          <b className="badge">Follow-up due</b>
+        ) : null}
       </div>
       <p className="headline">
         Hey, number{" "}

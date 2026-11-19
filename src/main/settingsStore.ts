@@ -20,6 +20,10 @@ interface FileShape {
   historyTransientTable: string;
   transientHighValueOver: number;
   autoResolveOnReply: boolean;
+  followUpMinutes: number;
+  endorseFollowUpMinutes: number;
+  facilityAlertCustomers: number;
+  facilityAlertHours: number;
   consentPhones: ConsentWarning[];
   sealed: Record<string, string>;
 }
@@ -52,6 +56,10 @@ function defaults(): FileShape {
     historyTransientTable: AIRTABLE.transientTableId,
     transientHighValueOver: 15,
     autoResolveOnReply: true,
+    followUpMinutes: 15,
+    endorseFollowUpMinutes: 30,
+    facilityAlertCustomers: 3,
+    facilityAlertHours: 3,
     consentPhones: [],
     sealed: {},
   };
@@ -94,6 +102,10 @@ export class SettingsStore {
     const over = Number(this.file.transientHighValueOver);
     this.file.transientHighValueOver = Number.isFinite(over) && over >= 0 ? over : 15;
     this.file.autoResolveOnReply = this.file.autoResolveOnReply !== false;
+    this.file.followUpMinutes = positive(this.file.followUpMinutes, 15);
+    this.file.endorseFollowUpMinutes = positive(this.file.endorseFollowUpMinutes, 30);
+    this.file.facilityAlertCustomers = positive(this.file.facilityAlertCustomers, 3);
+    this.file.facilityAlertHours = positive(this.file.facilityAlertHours, 3);
     this.memorySecrets = emptySecrets();
     for (const key of SECRET_KEYS) this.memorySecrets[key] = unseal(this.file.sealed[key] ?? "");
     this.memorySecrets.rcAccessExpiresAt = Number(unseal(this.file.sealed.rcAccessExpiresAt ?? "") || "0");
@@ -181,6 +193,10 @@ export class SettingsStore {
       historyTransientTable: this.file.historyTransientTable || AIRTABLE.transientTableId,
       transientHighValueOver: this.file.transientHighValueOver ?? 15,
       autoResolveOnReply: this.file.autoResolveOnReply !== false,
+      followUpMinutes: positive(this.file.followUpMinutes, 15),
+      endorseFollowUpMinutes: positive(this.file.endorseFollowUpMinutes, 30),
+      facilityAlertCustomers: positive(this.file.facilityAlertCustomers, 3),
+      facilityAlertHours: positive(this.file.facilityAlertHours, 3),
       consentPhones: this.file.consentPhones,
       secureStorage: this.secureStorageAvailable(),
     };
@@ -213,6 +229,10 @@ export class SettingsStore {
       this.file.transientHighValueOver = patch.transientHighValueOver;
     }
     if (patch.autoResolveOnReply != null) this.file.autoResolveOnReply = patch.autoResolveOnReply;
+    if (patch.followUpMinutes != null) this.file.followUpMinutes = positive(patch.followUpMinutes, 15);
+    if (patch.endorseFollowUpMinutes != null) this.file.endorseFollowUpMinutes = positive(patch.endorseFollowUpMinutes, 30);
+    if (patch.facilityAlertCustomers != null) this.file.facilityAlertCustomers = positive(patch.facilityAlertCustomers, 3);
+    if (patch.facilityAlertHours != null) this.file.facilityAlertHours = positive(patch.facilityAlertHours, 3);
     if (patch.consentPhones) this.file.consentPhones = patch.consentPhones.filter((item) => item.phone.trim());
     const secretError = this.applySecrets(patch);
     this.persist();
@@ -314,6 +334,10 @@ export class SettingsStore {
     fs.mkdirSync(path.dirname(this.path), { recursive: true });
     fs.writeFileSync(this.path, JSON.stringify({ ...this.file, sealed: { ...this.file.sealed } }, null, 2), "utf8");
   }
+}
+
+function positive(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function emptySecrets(): Secrets {

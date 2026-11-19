@@ -26,6 +26,10 @@ export function createBrowserDemo(): YsrApi {
   let showAccessCodes = false;
   let transientHighValueOver = 15;
   let autoResolveOnReply = true;
+  let followUpMinutes = 15;
+  let endorseFollowUpMinutes = 30;
+  let facilityAlertCustomers = 3;
+  let facilityAlertHours = 3;
   let banner: string | null = "Demo mode. This desk does not send texts.";
   const alerted = new Set<string>();
   const listeners = new Set<(snapshot: AppSnapshot) => void>();
@@ -50,6 +54,10 @@ export function createBrowserDemo(): YsrApi {
     historyTransientTable: "TRANSIENT",
     transientHighValueOver,
     autoResolveOnReply,
+    followUpMinutes,
+    endorseFollowUpMinutes,
+    facilityAlertCustomers,
+    facilityAlertHours,
     consentPhones: DEMO_CONSENT,
     secureStorage: false,
   });
@@ -72,6 +80,11 @@ export function createBrowserDemo(): YsrApi {
     urgentItems: session.urgentItems(),
     unseenUrgentCount: session.unseenUrgentCount(),
     facilities: session.listFacilities(),
+    followUps: session.followUps(),
+    commitments: session.commitments(),
+    facilityAlerts: session.facilityAlerts(),
+    facilityAlertHistory: session.facilityAlertHistory(),
+    facilityIssueCounts: session.facilityIssueCounts(),
     banner,
   });
 
@@ -204,6 +217,11 @@ export function createBrowserDemo(): YsrApi {
       if (patch.urgentSound != null) urgentSound = patch.urgentSound;
       if (patch.showAccessCodes != null) showAccessCodes = patch.showAccessCodes;
       if (patch.autoResolveOnReply != null) autoResolveOnReply = patch.autoResolveOnReply;
+      if (patch.followUpMinutes != null) followUpMinutes = patch.followUpMinutes;
+      if (patch.endorseFollowUpMinutes != null) endorseFollowUpMinutes = patch.endorseFollowUpMinutes;
+      if (patch.facilityAlertCustomers != null) facilityAlertCustomers = patch.facilityAlertCustomers;
+      if (patch.facilityAlertHours != null) facilityAlertHours = patch.facilityAlertHours;
+      session.setOpsSettings({ followUpMinutes, endorseFollowUpMinutes, facilityAlertCustomers, facilityAlertHours });
       if (patch.transientHighValueOver != null && patch.transientHighValueOver >= 0) {
         transientHighValueOver = patch.transientHighValueOver;
         session.setValueThresholds({ transientBookings: transientHighValueOver });
@@ -222,7 +240,20 @@ export function createBrowserDemo(): YsrApi {
       session.upsertMessages([message]);
       return { ok: true, message: "Simulated a customer text that has been waiting 6 minutes." };
     },
-    getPanelHint: async () => ["queue", "thread", "facilities", "settings"],
+    getPanelHint: async () => ["queue", "followups", "commitments", "alerts", "thread", "facilities", "settings"],
+    snoozeFollowUp: async (id, minutes) => {
+      session.snoozeFollowUp(id, minutes);
+    },
+    completeFollowUp: async (id) => {
+      session.completeFollowUp(id);
+    },
+    updateCommitment: async (id, status, note) => {
+      session.updateCommitment(id, status, note);
+    },
+    dismissFacilityAlert: async (id) => {
+      session.dismissFacilityAlert(id);
+    },
+    commitmentCsv: async () => session.commitmentCsv(),
     refreshFacilities: async () => ({ ok: true, message: "Demo facilities are loaded on this computer." }),
     setFacilityPick: async (phone, facilityId) => {
       session.setFacilityPick(phone, facilityId);

@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { BrowserWindow, NativeImage, Notification, clipboard, nativeImage, shell } from "electron";
+import { app, BrowserWindow, NativeImage, Notification, clipboard, nativeImage, shell } from "electron";
 import { ACCESS_REFRESH_INTERVAL_MS, ALERT_TICK_MS, HISTORY_LOOKBACK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS, SUPPORT_LINE_E164 } from "../shared/constants";
 import type { ActionResult, AppSnapshot, CustomerHistoryPage, FacilityListItem, FacilityRecord, HistoryMessage, SettingsPatch, SmsMessage, ThreadView } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
@@ -32,6 +32,8 @@ export class DeskEngine {
   private syncToken: string | null = null;
   private alertedPhones = new Set<string>();
   private alertedUrgent = new Set<string>();
+  private alertedFollowUps = new Set<string>();
+  private alertedFacilities = new Set<string>();
   private seenFlags = new Set<string>();
   private suppressNotify = true;
   private showWindow: () => void = () => undefined;
@@ -67,7 +69,9 @@ export class DeskEngine {
   }
 
   async start(): Promise<void> {
+    this.restoreOps();
     await this.applyMode();
+    this.syncOpsSettings();
     this.alertTimer = setInterval(() => this.noteQueue(), ALERT_TICK_MS);
     this.broadcast();
   }
@@ -96,6 +100,11 @@ export class DeskEngine {
       urgentItems: this.session.urgentItems(),
       unseenUrgentCount: this.session.unseenUrgentCount(),
       facilities: this.session.listFacilities(),
+      followUps: this.session.followUps(),
+      commitments: this.session.commitments(),
+      facilityAlerts: this.session.facilityAlerts(),
+      facilityAlertHistory: this.session.facilityAlertHistory(),
+      facilityIssueCounts: this.session.facilityIssueCounts(),
       banner: this.banner,
     };
   }
@@ -191,6 +200,7 @@ export class DeskEngine {
     if (patch.airtableToken || patch.clearAirtableToken) this.airtable = null;
     if (patch.consentPhones || modeChanged) this.session.setConsent(this.currentConsent());
     this.session.setValueThresholds({ transientBookings: this.store.toPublic(this.loggedIn).transientHighValueOver });
+    this.syncOpsSettings();
     if (modeChanged || patch.rcJwt || patch.rcClientSecret || patch.airtableToken) await this.applyMode();
     this.broadcast();
     return result;
@@ -352,6 +362,58 @@ export class DeskEngine {
     message.sentAt = new Date(Date.now() - 6 * 60_000).toISOString();
     this.ingest([message]);
     return { ok: true, message: "Simulated a customer text that has been waiting 6 minutes." };
+  }
+
+  snoozeFollowUp(id: string, minutes: number): void {
+    this.session.snoozeFollowUp(id, minutes);
+    this.persistOps();
+  }
+
+  completeFollowUp(id: string): void {
+    this.session.completeFollowUp(id);
+    this.persistOps();
+  }
+
+  updateCommitment(id: string, status: "open" | "waiting" | "done", note: string): void {
+    this.session.updateCommitment(id, status, note);
+    this.persistOps();
+  }
+
+  dismissFacilityAlert(id: string): void {
+    this.session.dismissFacilityAlert(id);
+    this.persistOps();
+  }
+
+  commitmentCsv(): string {
+    return this.session.commitmentCsv();
+  }
+
+  private restoreOps(): void {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "ops-state.json"), "utf8")) as ReturnType<
+        DeskSession["opsState"]
+      >;
+      this.session.loadOps(parsed);
+    } catch {
+      this.session.loadOps({});
+    }
+  }
+
+  private syncOpsSettings(): void {
+    const settings = this.store.toPublic(this.loggedIn);
+    this.session.setOpsSettings({
+      followUpMinutes: settings.followUpMinutes,
+      endorseFollowUpMinutes: settings.endorseFollowUpMinutes,
+      facilityAlertCustomers: settings.facilityAlertCustomers,
+      facilityAlertHours: settings.facilityAlertHours,
+    });
+  }
+
+  private persistOps(): void {
+    const state = this.session.opsState();
+    const target = path.join(app.getPath("userData"), "ops-state.json");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, JSON.stringify(state), "utf8");
   }
 
   private async applyMode(): Promise<void> {
@@ -581,10 +643,31 @@ export class DeskEngine {
       }
     }
     this.syncTaskbar();
+    this.noteOps();
+  }
+
+  private noteOps(): void {
+    if (!this.store.available || !this.store.notificationsEnabled) return;
+    for (const item of this.session.followUps()) {
+      if (item.state !== "due" || this.alertedFollowUps.has(item.id)) continue;
+      this.alertedFollowUps.add(item.id);
+      this.toast("YourSpotRented", item.toast);
+    }
+    for (const alert of this.session.facilityAlerts()) {
+      const signature = `${alert.id}:${alert.customers.map((customer) => customer.messageId).sort().join(",")}`;
+      if (this.alertedFacilities.has(signature)) continue;
+      this.alertedFacilities.add(signature);
+      this.toast("YourSpotRented", alert.toast);
+      if (alert.urgent) {
+        for (const win of this.windows) {
+          if (!win.isDestroyed()) win.flashFrame(true);
+        }
+      }
+    }
   }
 
   private syncTaskbar(): void {
-    const count = this.session.unseenUrgentCount();
+    const count = this.session.unseenUrgentCount() + this.session.facilityAlerts().filter((alert) => alert.urgent).length;
     for (const win of this.windows) {
       if (win.isDestroyed()) continue;
       try {

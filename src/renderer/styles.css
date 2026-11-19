@@ -293,6 +293,8 @@ h2, h3 { font-size: 16px; margin: 0; color: var(--ysr-text); font-weight: 700; }
 .facility-pick { display: flex; flex-direction: column; gap: 4px; }
 .history summary { font-weight: 700; }
 .summary-row { color: var(--ysr-text-secondary); font-size: 13px; }
+.age-amber { border-left-color: #d97706; }
+.age-red { border-left-color: var(--ysr-urgent); }
 
 .texty {
   border: 0;

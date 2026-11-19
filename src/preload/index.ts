@@ -32,6 +32,11 @@ const api: YsrApi = {
   refreshFacilities: () => ipcRenderer.invoke("ysr:refresh-facilities") as Promise<ActionResult>,
   setFacilityPick: (phone, facilityId) => ipcRenderer.invoke("ysr:set-facility", phone, facilityId) as Promise<void>,
   loadHistory: (phone, cursor) => ipcRenderer.invoke("ysr:load-history", phone, cursor ?? null) as Promise<CustomerHistoryPage>,
+  snoozeFollowUp: (id, minutes) => ipcRenderer.invoke("ysr:snooze-follow-up", id, minutes) as Promise<void>,
+  completeFollowUp: (id) => ipcRenderer.invoke("ysr:complete-follow-up", id) as Promise<void>,
+  updateCommitment: (id, status, note) => ipcRenderer.invoke("ysr:update-commitment", id, status, note) as Promise<void>,
+  dismissFacilityAlert: (id) => ipcRenderer.invoke("ysr:dismiss-alert", id) as Promise<void>,
+  commitmentCsv: () => ipcRenderer.invoke("ysr:commitment-csv") as Promise<string>,
 };
 
 contextBridge.exposeInMainWorld("ysr", api);

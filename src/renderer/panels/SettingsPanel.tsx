@@ -46,6 +46,42 @@ export function SettingsPanel({
         Auto-resolve when someone replies
       </label>
       <label>
+        Follow-up reminder after (minutes)
+        <input
+          type="number"
+          min={1}
+          value={settings.followUpMinutes}
+          onChange={(event) => void save({ followUpMinutes: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Endorse / processing reminder after (minutes)
+        <input
+          type="number"
+          min={1}
+          value={settings.endorseFollowUpMinutes}
+          onChange={(event) => void save({ endorseFollowUpMinutes: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Facility alert after this many customers
+        <input
+          type="number"
+          min={1}
+          value={settings.facilityAlertCustomers}
+          onChange={(event) => void save({ facilityAlertCustomers: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Facility alert window (hours)
+        <input
+          type="number"
+          min={1}
+          value={settings.facilityAlertHours}
+          onChange={(event) => void save({ facilityAlertHours: Number(event.target.value) })}
+        />
+      </label>
+      <label>
         Open numbers in
         <select
           value={settings.openNumbersIn}

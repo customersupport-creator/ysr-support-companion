@@ -270,6 +270,90 @@ export interface ThreadView {
   matchedSops: MatchedSop[];
 }
 
+export interface FollowUpItem {
+  id: string;
+  phone: string;
+  displayPhone: string;
+  agentName: string;
+  quote: string;
+  promisedAt: string;
+  dueAt: string;
+  waitMinutes: number;
+  kind: "standard" | "endorse";
+  state: "pending" | "due" | "snoozed";
+  toast: string;
+}
+
+export type CommitmentType = "refund" | "reimbursement" | "relocation" | "credit" | "callback" | "update";
+export type CommitmentStatus = "open" | "waiting" | "done";
+
+export interface CommitmentItem {
+  id: string;
+  phone: string;
+  displayPhone: string;
+  customerName: string;
+  rentalId: string;
+  facility: string;
+  type: CommitmentType;
+  typeLabel: string;
+  amount: string;
+  agentName: string;
+  at: string;
+  ageMs: number;
+  snippet: string;
+  status: CommitmentStatus;
+  note: string;
+  suggestDone: boolean;
+  ageTone: "normal" | "amber" | "red";
+}
+
+export interface FacilityAlertCustomer {
+  phone: string;
+  displayPhone: string;
+  snippet: string;
+  at: string;
+  messageId: string;
+}
+
+export interface FacilityAlertItem {
+  id: string;
+  facilityName: string;
+  facilityRecordId: string | null;
+  category: IssueCategory;
+  phrase: string;
+  customers: FacilityAlertCustomer[];
+  newestAt: string;
+  spanLabel: string;
+  toast: string;
+  urgent: boolean;
+  access: FacilityAccess | null;
+}
+
+export interface FacilityIssueCount {
+  facilityName: string;
+  category: IssueCategory;
+  label: string;
+  customers: number;
+}
+
+export interface FollowUpOverride {
+  id: string;
+  doneAt?: string;
+  snoozeUntil?: string;
+}
+
+export interface CommitmentOverride {
+  id: string;
+  status?: CommitmentStatus;
+  note?: string;
+}
+
+export interface AlertDismissal {
+  id: string;
+  messageIds: string[];
+  at: string;
+}
+
 export interface PublicSettings {
   demoMode: boolean;
   rcServer: "production" | "sandbox";
@@ -290,6 +374,10 @@ export interface PublicSettings {
   historyTransientTable: string;
   transientHighValueOver: number;
   autoResolveOnReply: boolean;
+  followUpMinutes: number;
+  endorseFollowUpMinutes: number;
+  facilityAlertCustomers: number;
+  facilityAlertHours: number;
   consentPhones: ConsentWarning[];
   secureStorage: boolean;
 }
@@ -314,6 +402,11 @@ export interface AppSnapshot {
   urgentItems: UrgentListItem[];
   unseenUrgentCount: number;
   facilities: FacilityListItem[];
+  followUps: FollowUpItem[];
+  commitments: CommitmentItem[];
+  facilityAlerts: FacilityAlertItem[];
+  facilityAlertHistory: FacilityAlertItem[];
+  facilityIssueCounts: FacilityIssueCount[];
   banner: string | null;
 }
 
@@ -338,6 +431,10 @@ export interface SettingsPatch {
   historyTransientTable?: string;
   transientHighValueOver?: number;
   autoResolveOnReply?: boolean;
+  followUpMinutes?: number;
+  endorseFollowUpMinutes?: number;
+  facilityAlertCustomers?: number;
+  facilityAlertHours?: number;
   consentPhones?: ConsentWarning[];
 }
 
@@ -368,4 +465,9 @@ export interface YsrApi {
   refreshFacilities(): Promise<ActionResult>;
   setFacilityPick(phone: string, facilityId: string | null): Promise<void>;
   loadHistory(phone: string, cursor?: string | null): Promise<CustomerHistoryPage>;
+  snoozeFollowUp(id: string, minutes: number): Promise<void>;
+  completeFollowUp(id: string): Promise<void>;
+  updateCommitment(id: string, status: CommitmentStatus, note: string): Promise<void>;
+  dismissFacilityAlert(id: string): Promise<void>;
+  commitmentCsv(): Promise<string>;
 }

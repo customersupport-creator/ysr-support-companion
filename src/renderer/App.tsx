@@ -6,6 +6,7 @@ import { createBrowserDemo } from "./browserDemo";
 import { deskPanels } from "./panels/registry";
 import { QueuePanel } from "./panels/QueuePanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import { CommitmentsPanel, FacilityAlertsPanel, FollowUpsPanel } from "./panels/OpsPanels";
 import { FacilitiesPanel } from "./panels/FacilitiesPanel";
 import { ThreadPanel } from "./panels/ThreadPanel";
 
@@ -101,6 +102,11 @@ export function App() {
         <span>{snap.connection.ringcentralDetail}</span>
       </p>
       {snap.banner ? <p className="banner">{snap.banner}</p> : null}
+      {snap.facilityAlerts.map((alert) => (
+        <p className="banner" key={alert.id}>
+          {alert.toast}
+        </p>
+      ))}
       <nav className="tabs" aria-label="Panels">
         {deskPanels.map((tab) => (
           <button
@@ -111,6 +117,9 @@ export function App() {
           >
             {tab.label}
             {tab.count === "queue" ? <em>{snap.queue.length}</em> : null}
+            {tab.count === "followups" ? <em>{snap.followUps.filter((item) => item.state === "due").length}</em> : null}
+            {tab.count === "commitments" ? <em>{snap.commitments.filter((item) => item.status !== "done").length}</em> : null}
+            {tab.count === "alerts" ? <em>{snap.facilityAlerts.length}</em> : null}
           </button>
         ))}
       </nav>
@@ -161,6 +170,9 @@ export function App() {
             }}
           />
         ) : null}
+        {panel === "followups" ? <FollowUpsPanel api={api} snap={snap} /> : null}
+        {panel === "commitments" ? <CommitmentsPanel api={api} snap={snap} /> : null}
+        {panel === "alerts" ? <FacilityAlertsPanel api={api} snap={snap} /> : null}
         {panel === "facilities" ? (
           <FacilitiesPanel
             api={api}

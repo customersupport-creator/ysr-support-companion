@@ -36,5 +36,5 @@ export const RC_SERVERS = {
   sandbox: "https://platform.devtest.ringcentral.com",
 } as const;
 
-export const PANEL_IDS = ["queue", "thread", "facilities", "settings"] as const;
+export const PANEL_IDS = ["queue", "followups", "commitments", "alerts", "thread", "facilities", "settings"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
