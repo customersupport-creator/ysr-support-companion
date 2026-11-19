@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { SUPPORT_LINE_DISPLAY, type PanelId } from "../shared/constants";
 import type { AppSnapshot, YsrApi } from "../shared/types";
 import { createBrowserDemo } from "./browserDemo";
-import { ConfirmDialog } from "./components/ConfirmDialog";
-import { LearningPanel } from "./panels/LearningPanel";
 import { deskPanels } from "./panels/registry";
 import { QueuePanel } from "./panels/QueuePanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
@@ -18,9 +16,7 @@ export function App() {
   const [api, setApi] = useState<YsrApi | null>(null);
   const [snap, setSnap] = useState<AppSnapshot | null>(null);
   const [panel, setPanel] = useState<PanelId>("queue");
-  const [confirmText, setConfirmText] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let unsubscribe: () => void = () => undefined;
@@ -39,27 +35,19 @@ export function App() {
     };
   }, []);
 
-  if (!api || !snap) return <div className="boot">Opening YSR Desk…</div>;
+  if (!api || !snap) return <div className="boot">Opening YourSpotRented…</div>;
 
   const openThread = (threadId: string) => {
     void api.selectThread(threadId);
     setPanel("thread");
-    setNote("");
-  };
-
-  const runCommand = async (command: string) => {
-    if (!snap.selectedThreadId) return;
-    const result = await api.runCommand(snap.selectedThreadId, command);
-    setNote(result.message);
-    if (result.openConfirm && result.confirmText) setConfirmText(result.confirmText);
   };
 
   return (
     <div className="app">
       <header className="top">
         <div className="brand">
-          <strong>YSR Desk</strong>
-          <span>{SUPPORT_LINE_DISPLAY}</span>
+          <strong>YourSpotRented</strong>
+          <span>Support desk · {SUPPORT_LINE_DISPLAY}</span>
         </div>
         <div className="top-actions">
           <button
@@ -108,29 +96,10 @@ export function App() {
             onSimulate={() => void api.simulateInbound().then((result) => setNote(result.message))}
           />
         ) : null}
-        {panel === "thread" ? (
-          <ThreadPanel snap={snap} note={note} onCommand={(command) => void runCommand(command)} onOpenConfirm={setConfirmText} />
-        ) : null}
-        {panel === "learning" ? <LearningPanel snap={snap} /> : null}
+        {panel === "thread" ? <ThreadPanel snap={snap} /> : null}
         {panel === "settings" ? <SettingsPanel api={api} snap={snap} onNote={setNote} /> : null}
       </main>
-      {note && panel === "queue" ? <p className="footnote">{note}</p> : null}
-      {confirmText && snap.selectedThreadId ? (
-        <ConfirmDialog
-          text={confirmText}
-          sending={sending}
-          onCancel={() => setConfirmText(null)}
-          onSend={async () => {
-            if (!snap.selectedThreadId || !confirmText) return;
-            setSending(true);
-            const result = await api.confirmSend(snap.selectedThreadId, confirmText);
-            setSending(false);
-            setNote(result.message);
-            if (result.ok) setConfirmText(null);
-            else setNote(result.message);
-          }}
-        />
-      ) : null}
+      {note ? <p className="footnote">{note}</p> : null}
     </div>
   );
 }

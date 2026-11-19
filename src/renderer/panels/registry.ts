@@ -10,6 +10,5 @@ export interface DeskPanel {
 export const deskPanels: DeskPanel[] = [
   { id: "queue", label: "Queue", count: "queue" },
   { id: "thread", label: "Thread" },
-  { id: "learning", label: "Learning" },
   { id: "settings", label: "Settings" },
 ];

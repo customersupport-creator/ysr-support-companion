@@ -1,5 +1,5 @@
 appId: com.yourspotrented.desk
-productName: YSR Desk
+productName: YourSpotRented
 copyright: Copyright © Yourspotrented.com
 directories:
   output: release
@@ -25,5 +25,5 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: YSR Desk
-  artifactName: YSR-Desk-Setup-${version}.${ext}
+  shortcutName: YourSpotRented
+  artifactName: YourSpotRented-Setup-${version}.${ext}

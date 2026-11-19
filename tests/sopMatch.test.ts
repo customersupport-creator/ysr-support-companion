@@ -59,7 +59,6 @@ describe("SOP keyword matching", () => {
       matchKeywords: "tow",
       lookups: "",
       steps: "",
-      suggestedReplies: "",
       escalateTo: "",
       notes: "",
       status: "Active",

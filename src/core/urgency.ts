@@ -1,4 +1,3 @@
-import { RED_RENOTIFY_MS, YELLOW_RENOTIFY_MS } from "../shared/constants";
 import type { SmsMessage, Urgency } from "../shared/types";
 import { isReactionMessage } from "./reactions";
 
@@ -9,12 +8,6 @@ export interface UrgencyResult {
 }
 
 const THANKS = /^(thanks|thank you|ty|ok|okay|got it|perfect|great|sounds good|you'?re welcome)[.!\s]*$/i;
-
-export function renotifyIntervalMs(urgency: Urgency): number | null {
-  if (urgency === "RED") return RED_RENOTIFY_MS;
-  if (urgency === "YELLOW") return YELLOW_RENOTIFY_MS;
-  return null;
-}
 
 export function classifyUrgency(messages: SmsMessage[]): UrgencyResult {
   const inbound = messages

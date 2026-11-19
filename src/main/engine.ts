@@ -1,36 +1,16 @@
-import fs from "fs";
-import path from "path";
 import { BrowserWindow, Notification } from "electron";
-import {
-  PANEL_IDS,
-  RC_SERVERS,
-  RECONCILE_INTERVAL_MS,
-  RENOTIFY_TICK_MS,
-  SOP_REFRESH_INTERVAL_MS,
-} from "../shared/constants";
-import type {
-  AppSnapshot,
-  CommandResult,
-  ConnectionState,
-  Correction,
-  SendResult,
-  SettingsPatch,
-  SmsMessage,
-} from "../shared/types";
-import { renotifyIntervalMs } from "../core/urgency";
+import { ALERT_TICK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS } from "../shared/constants";
+import type { ActionResult, AppSnapshot, SettingsPatch, SmsMessage } from "../shared/types";
+import { shouldAlertForWait } from "../core/alerts";
 import { toE164 } from "../core/format";
 import { isStopKeyword } from "../core/safety";
 import { DeskSession } from "../core/session";
-import type { Drafter } from "../core/draftTypes";
-import { createLocalDrafter } from "../core/localDrafter";
 import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
 import { PLAYBOOK_SOPS } from "../demo/playbookSops";
 import { AirtableClient } from "../services/airtable/client";
-import { createLlmDrafter } from "../services/llm/draftWithLlm";
 import { RingCentralClient } from "../services/ringcentral/client";
 import { RcEventStream } from "../services/ringcentral/subscription";
 import { loginWithOAuth } from "./oauth";
-import { loadPlaybookText } from "./playbook";
 import { SettingsStore } from "./settingsStore";
 
 export class DeskEngine {
@@ -41,34 +21,25 @@ export class DeskEngine {
   private airtable: AirtableClient | null = null;
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
-  private renotifyTimer: ReturnType<typeof setInterval> | null = null;
+  private alertTimer: ReturnType<typeof setInterval> | null = null;
   private syncToken: string | null = null;
-  private bootstrapped = false;
-  private seenKeys = new Set<string>();
+  private alertedPhones = new Set<string>();
   private seenFlags = new Set<string>();
-  private lastToast = new Map<string, number>();
-  private sending = new Set<string>();
+  private suppressNotify = true;
   private showWindow: () => void = () => undefined;
   private banner: string | null = null;
   private rcDetail = "Demo mode is on.";
-  private rcState: ConnectionState["ringcentral"] = "demo";
-  private subState: ConnectionState["subscription"] = "off";
+  private rcState: AppSnapshot["connection"]["ringcentral"] = "demo";
+  private subState: AppSnapshot["connection"]["subscription"] = "off";
   private airtableDetail = "Demo facilities and SOPs.";
-  private airtableState: ConnectionState["airtable"] = "demo";
-  private llmDetail = "Local playbook drafter.";
-  private correctionsReady = false;
+  private airtableState: AppSnapshot["connection"]["airtable"] = "demo";
   private loggedIn = false;
-  private suppressNotify = true;
 
   constructor(private readonly store: SettingsStore) {
     this.session = new DeskSession({
-      drafter: { draft: (input) => this.draft(input) },
-      agentName: store.agentName,
-      signature: store.signature,
       sops: PLAYBOOK_SOPS,
       facilities: DEMO_FACILITIES,
       consent: this.currentConsent(),
-      corrections: this.loadCorrections(),
     });
     this.session.subscribe(() => {
       this.noteQueue();
@@ -87,20 +58,18 @@ export class DeskEngine {
 
   async start(): Promise<void> {
     await this.applyMode();
-    this.renotifyTimer = setInterval(() => this.noteQueue(), RENOTIFY_TICK_MS);
+    this.alertTimer = setInterval(() => this.noteQueue(), ALERT_TICK_MS);
     this.broadcast();
   }
 
   stop(): void {
     this.stopLive();
-    if (this.renotifyTimer) clearInterval(this.renotifyTimer);
-    this.saveCorrections();
+    if (this.alertTimer) clearInterval(this.alertTimer);
   }
 
   snapshot(): AppSnapshot {
-    const llmReady = Boolean(this.store.secrets.llmApiKey);
     return {
-      settings: this.store.toPublic(this.loggedIn, this.correctionsReady),
+      settings: this.store.toPublic(this.loggedIn),
       connection: {
         mode: this.store.demoMode ? "demo" : "live",
         ringcentral: this.store.demoMode ? "demo" : this.rcState,
@@ -108,89 +77,43 @@ export class DeskEngine {
         subscription: this.store.demoMode ? "off" : this.subState,
         airtable: this.store.demoMode ? "demo" : this.airtableState,
         airtableDetail: this.airtableDetail,
-        llm: this.store.demoMode ? "demo" : llmReady ? "ready" : "off",
-        llmDetail: this.store.demoMode ? "Demo uses the local playbook drafter." : this.llmDetail,
       },
       queue: this.session.queue(),
       flagged: this.session.flagged(),
       selectedThreadId: this.session.selectedId,
       thread: this.session.threadView(),
-      learning: this.session.learning(),
-      outbox: this.session.getOutbox(),
       banner: this.banner,
     };
   }
 
   async setAvailable(value: boolean): Promise<void> {
-    const was = this.store.available;
     this.store.available = value;
-    if (value && !was) this.announceBacklog();
+    this.noteQueue();
     this.broadcast();
   }
 
   async selectThread(threadId: string | null): Promise<void> {
-    await this.session.select(threadId);
+    this.session.select(threadId);
   }
 
-  async runCommand(threadId: string, command: string): Promise<CommandResult> {
-    const result = await this.session.runCommand(threadId, command);
-    this.saveCorrections();
-    await this.flushCorrections();
-    this.broadcast();
-    return result;
-  }
-
-  async confirmSend(threadId: string, text: string): Promise<SendResult> {
-    if (this.sending.has(threadId)) return { ok: false, message: "A send is already in progress." };
-    let payload: { to: string; text: string };
-    try {
-      payload = this.session.previewSend(threadId, text);
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : "Not approved." };
-    }
-    this.sending.add(threadId);
-    try {
-      if (this.store.demoMode) {
-        this.session.commitSent(threadId, payload.text, `demo-${Date.now()}`, true);
-        this.banner = "Demo send recorded on this computer. Nothing was sent to the customer.";
-        return { ok: true, message: this.banner };
-      }
-      if (!this.rc || !this.loggedIn) return { ok: false, message: "RingCentral is not connected." };
-      const sent = await this.rc.sendSms(payload.to, payload.text);
-      this.session.commitSent(threadId, payload.text, sent.id, false);
-      this.banner = "Sent.";
-      return { ok: true, message: "Sent." };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Send failed.";
-      this.banner = message;
-      return { ok: false, message };
-    } finally {
-      this.sending.delete(threadId);
-      this.broadcast();
-    }
-  }
-
-  async saveSettings(patch: SettingsPatch): Promise<SendResult> {
+  async saveSettings(patch: SettingsPatch): Promise<ActionResult> {
     const modeChanged = patch.demoMode != null && patch.demoMode !== this.store.demoMode;
     const result = this.store.update(patch);
-    this.session.setAgent(this.store.agentName, this.store.signature);
     if (patch.alwaysOnTop != null) {
       for (const win of this.windows) win.setAlwaysOnTop(patch.alwaysOnTop);
     }
     if (patch.airtableToken || patch.clearAirtableToken) this.airtable = null;
     if (patch.consentPhones || modeChanged) this.session.setConsent(this.currentConsent());
-    if (modeChanged || patch.rcJwt || patch.rcClientSecret || patch.airtableToken || patch.llmApiKey) {
-      await this.applyMode();
-    }
+    if (modeChanged || patch.rcJwt || patch.rcClientSecret || patch.airtableToken) await this.applyMode();
     this.broadcast();
     return result;
   }
 
-  async testRingCentral(): Promise<SendResult> {
+  async testRingCentral(): Promise<ActionResult> {
     try {
       await this.ensureClient(true);
       this.rcState = "connected";
-      this.rcDetail = "Signed in.";
+      this.rcDetail = "Signed in. This app only reads messages.";
       this.loggedIn = true;
       this.broadcast();
       return { ok: true, message: "RingCentral accepted the credentials." };
@@ -203,10 +126,9 @@ export class DeskEngine {
     }
   }
 
-  async testAirtable(): Promise<SendResult> {
+  async testAirtable(): Promise<ActionResult> {
     try {
-      const client = this.airtableClient();
-      const sops = await client.listSops();
+      const sops = await this.airtableClient().listSops();
       this.airtableState = "connected";
       this.airtableDetail = `Read ${sops.length} SOPs.`;
       if (!this.store.demoMode) this.session.setSops(sops.length ? sops : PLAYBOOK_SOPS);
@@ -221,7 +143,7 @@ export class DeskEngine {
     }
   }
 
-  async startOAuth(): Promise<SendResult> {
+  async startOAuth(): Promise<ActionResult> {
     try {
       const client = await this.ensureClient(false);
       await loginWithOAuth(client, this.store.rcClientId, RC_SERVERS[this.store.rcServer]);
@@ -229,17 +151,16 @@ export class DeskEngine {
       if (tokens) this.store.rememberTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
       this.loggedIn = true;
       this.rcState = "connected";
-      this.rcDetail = "Signed in with OAuth.";
+      this.rcDetail = "Signed in with OAuth. This app only reads messages.";
       if (!this.store.demoMode) await this.applyMode();
       this.broadcast();
       return { ok: true, message: "Signed in to RingCentral." };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "OAuth failed.";
-      return { ok: false, message };
+      return { ok: false, message: error instanceof Error ? error.message : "OAuth failed." };
     }
   }
 
-  async disconnectRingCentral(): Promise<SendResult> {
+  async disconnectRingCentral(): Promise<ActionResult> {
     this.store.clearTokens();
     this.loggedIn = false;
     this.stopLive();
@@ -249,63 +170,41 @@ export class DeskEngine {
     return { ok: true, message: "Signed out." };
   }
 
-  async createCorrectionsTable(): Promise<SendResult> {
-    if (!this.store.correctionsOptIn) {
-      return { ok: false, message: "Turn on the opt-in first. This app will not create a table unless you ask it to." };
-    }
-    try {
-      const client = this.airtableClient();
-      const id = await client.createCorrectionsTable();
-      this.store.correctionsTableId = id;
-      this.correctionsReady = true;
-      this.banner = "AGENT_CORRECTIONS is ready. Existing tables were not changed.";
-      this.broadcast();
-      return { ok: true, message: this.banner };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not create the table.";
-      return { ok: false, message };
-    }
-  }
-
-  async simulateInbound(): Promise<SendResult> {
+  async simulateInbound(): Promise<ActionResult> {
     if (!this.store.demoMode) return { ok: false, message: "Simulate is only available in demo mode." };
-    this.ingest([simulatedInbound(new Date())]);
-    return { ok: true, message: "Simulated a new customer text." };
+    const message = simulatedInbound(new Date());
+    message.sentAt = new Date(Date.now() - 6 * 60_000).toISOString();
+    this.ingest([message]);
+    return { ok: true, message: "Simulated a customer text that has been waiting 6 minutes." };
   }
 
   private async applyMode(): Promise<void> {
     this.stopLive();
-    this.bootstrapped = false;
-    this.seenKeys.clear();
+    this.alertedPhones.clear();
     this.seenFlags.clear();
     this.suppressNotify = true;
-    this.session.setAgent(this.store.agentName, this.store.signature);
     this.session.setConsent(this.currentConsent());
     if (this.store.demoMode) {
       this.session.setSops(PLAYBOOK_SOPS);
       this.session.setFacilities(DEMO_FACILITIES);
       this.session.setMessages(buildDemoMessages(new Date()));
       this.rcState = "demo";
-      this.rcDetail = "Demo mode is on. No credentials are used.";
+      this.rcDetail = "Demo mode is on. No credentials are used, and nothing is sent.";
       this.airtableState = "demo";
-      this.airtableDetail = "Using the bundled playbook SOPs and two sample facilities.";
+      this.airtableDetail = "Using the bundled SOP list and two sample facilities.";
       this.subState = "off";
       this.loggedIn = false;
-      this.llmDetail = "Local playbook drafter.";
       this.finishLoad();
       return;
     }
     this.session.setSops(PLAYBOOK_SOPS);
     this.session.setFacilities([]);
     this.session.setMessages([]);
-    this.llmDetail = this.store.secrets.llmApiKey
-      ? `${this.store.llmProvider} · ${this.store.llmModel}`
-      : "No LLM key. Drafts use the local playbook drafter.";
     try {
       await this.ensureClient(true);
       this.loggedIn = true;
       this.rcState = "connected";
-      this.rcDetail = "Signed in.";
+      this.rcDetail = "Signed in. Reading the message store.";
       const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
       const synced = await this.rc!.syncSms(null, since);
       this.syncToken = synced.syncToken;
@@ -325,7 +224,6 @@ export class DeskEngine {
 
   private finishLoad(): void {
     this.suppressNotify = false;
-    this.bootstrapped = false;
     this.noteQueue();
     this.broadcast();
   }
@@ -337,8 +235,7 @@ export class DeskEngine {
       (messages) => this.ingest(messages),
       (status, detail) => {
         this.subState = status;
-        if (status !== "live") this.rcDetail = detail;
-        else this.rcDetail = "Signed in. Listening for SMS.";
+        this.rcDetail = status === "live" ? "Signed in. Listening for SMS." : detail;
         this.broadcast();
       },
     );
@@ -375,7 +272,7 @@ export class DeskEngine {
   private async refreshReference(): Promise<void> {
     if (!this.store.secrets.airtableToken) {
       this.airtableState = "off";
-      this.airtableDetail = "No Airtable token. Using the bundled playbook until you add one.";
+      this.airtableDetail = "No Airtable token. Using the bundled SOP list until you add one.";
       this.session.setSops(PLAYBOOK_SOPS);
       return;
     }
@@ -386,14 +283,6 @@ export class DeskEngine {
       this.session.setFacilities(facilities);
       this.airtableState = "connected";
       this.airtableDetail = `${sops.length} SOPs, ${facilities.length} facilities. Read only.`;
-      if (this.store.correctionsOptIn) {
-        const found = await client.inspectCorrectionsTable();
-        this.correctionsReady = Boolean(found && found.missingFields.length === 0);
-        if (found?.id && this.correctionsReady) this.store.correctionsTableId = found.id;
-        if (found && found.missingFields.length > 0) {
-          this.airtableDetail += ` AGENT_CORRECTIONS is missing ${found.missingFields.join(", ")}. It was not modified.`;
-        }
-      }
       const extra = await client.listRecentMessages(2);
       if (extra.length) this.ingest(extra);
     } catch (error) {
@@ -421,25 +310,6 @@ export class DeskEngine {
     this.session.upsertMessages(messages);
   }
 
-  private async draft(input: Parameters<Drafter["draft"]>[0]) {
-    const local = createLocalDrafter();
-    if (this.store.demoMode || !this.store.secrets.llmApiKey) return local.draft(input);
-    try {
-      const llm = createLlmDrafter({
-        provider: this.store.llmProvider,
-        apiKey: this.store.secrets.llmApiKey,
-        model: this.store.llmModel,
-        playbook: loadPlaybookText(),
-      });
-      return await llm.draft(input);
-    } catch (error) {
-      const fallback = await local.draft(input);
-      const reason = error instanceof Error ? error.message : "LLM failed.";
-      fallback.agentQuestion = `${reason} Showing a local playbook draft. ${fallback.agentQuestion}`.trim();
-      return fallback;
-    }
-  }
-
   private async ensureClient(login: boolean): Promise<RingCentralClient> {
     if (!this.store.rcClientId || !this.store.secrets.rcClientSecret) {
       throw new Error("Add the RingCentral client ID and client secret in Settings.");
@@ -458,9 +328,7 @@ export class DeskEngine {
     }
     if (login) {
       if (this.store.secrets.rcJwt) await client.loginWithJwt(this.store.secrets.rcJwt);
-      else if (!this.store.secrets.rcAccessToken) {
-        throw new Error("Add a JWT or use OAuth login.");
-      }
+      else if (!this.store.secrets.rcAccessToken) throw new Error("Add a JWT or use OAuth login.");
       const tokens = client.getTokens();
       if (tokens) this.store.rememberTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
     }
@@ -470,66 +338,29 @@ export class DeskEngine {
 
   private airtableClient(): AirtableClient {
     if (!this.store.secrets.airtableToken) throw new Error("Add an Airtable personal access token in Settings.");
-    if (!this.airtable) this.airtable = new AirtableClient(this.store.secrets.airtableToken);
-    if (this.store.correctionsTableId) this.airtable.setCorrectionsTableId(this.store.correctionsTableId);
+    this.airtable = new AirtableClient(this.store.secrets.airtableToken);
     return this.airtable;
   }
 
-  private async flushCorrections(): Promise<void> {
-    if (this.store.demoMode || !this.store.correctionsOptIn || !this.correctionsReady) return;
-    try {
-      const client = this.airtableClient();
-      for (const item of this.session.getCorrections()) {
-        if (item.synced) continue;
-        await client.addCorrection(item);
-        this.session.markCorrectionSynced(item.id);
-      }
-      this.saveCorrections();
-    } catch (error) {
-      this.banner = error instanceof Error ? error.message : "Could not sync a correction.";
-    }
-  }
-
+  /** One toast per phone number, and only after the customer has waited 5 minutes. */
   private noteQueue(): void {
     if (this.suppressNotify) return;
-    const queue = this.session.queue().filter((card) => !card.skipped);
-    const flags = this.session.flagged();
-    if (!this.bootstrapped) {
+    const queue = this.session.queue();
+    const waiting = new Set(queue.map((card) => card.customerPhone));
+    for (const phone of this.alertedPhones) {
+      if (!waiting.has(phone)) this.alertedPhones.delete(phone);
+    }
+    if (this.store.available && this.store.notificationsEnabled) {
       for (const card of queue) {
-        this.seenKeys.add(card.key);
-        this.lastToast.set(card.key, Date.now());
+        if (!shouldAlertForWait(card.waitMs) || this.alertedPhones.has(card.customerPhone)) continue;
+        this.alertedPhones.add(card.customerPhone);
+        this.toast(card.headline, card.preview);
       }
-      for (const flag of flags) this.seenFlags.add(flag.threadId);
-      this.bootstrapped = true;
-      return;
-    }
-    if (!this.store.available || !this.store.notificationsEnabled) return;
-    const now = Date.now();
-    for (const card of queue) {
-      const interval = renotifyIntervalMs(card.urgency);
-      const seen = this.seenKeys.has(card.key);
-      const last = this.lastToast.get(card.key) ?? 0;
-      if (!seen || (interval != null && now - last >= interval)) {
-        this.toast(card.headline, seen ? `Still waiting ${card.preview}` : card.preview);
-        this.seenKeys.add(card.key);
-        this.lastToast.set(card.key, now);
+      for (const flag of this.session.flagged()) {
+        if (this.seenFlags.has(flag.threadId)) continue;
+        this.seenFlags.add(flag.threadId);
+        this.toast("Do not text", flag.headline);
       }
-    }
-    for (const flag of flags) {
-      if (this.seenFlags.has(flag.threadId)) continue;
-      this.seenFlags.add(flag.threadId);
-      this.toast("Do not text", flag.headline);
-    }
-  }
-
-  private announceBacklog(): void {
-    const unseen = this.session.queue().filter((card) => !card.skipped && !this.seenKeys.has(card.key));
-    if (unseen.length === 1) this.toast(unseen[0].headline, unseen[0].preview);
-    else if (unseen.length > 1) this.toast("YSR Desk", `${unseen.length} customers need a reply.`);
-    const now = Date.now();
-    for (const card of this.session.queue()) {
-      this.seenKeys.add(card.key);
-      this.lastToast.set(card.key, now);
     }
   }
 
@@ -547,20 +378,6 @@ export class DeskEngine {
       if (!merged.some((existing) => toE164(existing.phone) === toE164(item.phone))) merged.push(item);
     }
     return merged;
-  }
-
-  private loadCorrections(): Correction[] {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(this.store.correctionsPath, "utf8")) as Correction[];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private saveCorrections(): void {
-    fs.mkdirSync(path.dirname(this.store.correctionsPath), { recursive: true });
-    fs.writeFileSync(this.store.correctionsPath, JSON.stringify(this.session.getCorrections(), null, 2), "utf8");
   }
 
   private broadcast(): void {

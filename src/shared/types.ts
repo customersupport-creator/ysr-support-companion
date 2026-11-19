@@ -3,20 +3,6 @@ import type { PanelId } from "./constants";
 export type Direction = "inbound" | "outbound";
 export type MessageSource = "ringcentral" | "airtable" | "demo";
 export type Urgency = "RED" | "YELLOW" | "GREEN";
-export type CustomerMood = "calm" | "confused" | "worried" | "frustrated" | "angry";
-export type DraftOptionId = "A" | "B" | "C";
-export type ApprovalOptionId = DraftOptionId | "MINE";
-
-export type ApprovalStatus =
-  | "idle"
-  | "draft_ready"
-  | "approved"
-  | "invalidated"
-  | "mine_logged"
-  | "rejected"
-  | "skipped"
-  | "consent_blocked"
-  | "sent";
 
 export interface SmsMessage {
   id: string;
@@ -53,9 +39,8 @@ export interface QueueCard {
   urgency: Urgency;
   urgent: boolean;
   reasons: string[];
-  skipped: boolean;
   lastCustomerMessageId: string;
-  /** thread id + message id, so a new customer text counts as a new item */
+  /** thread id + message id, so a new customer text is a new queue item */
   key: string;
 }
 
@@ -76,7 +61,6 @@ export interface SopRecord {
   matchKeywords: string;
   lookups: string;
   steps: string;
-  suggestedReplies: string;
   escalateTo: string;
   notes: string;
   status: string;
@@ -126,65 +110,6 @@ export interface FacilityFacts {
   accessPoint?: string;
 }
 
-export interface DraftOption {
-  id: DraftOptionId;
-  label: string;
-  text: string;
-}
-
-export interface DraftBundle {
-  threadId: string;
-  basedOnMessageId: string;
-  concern: string;
-  mood: CustomerMood;
-  reservation: ReservationInfo | null;
-  facilityName: string | null;
-  matchedSops: MatchedSop[];
-  disagreementNotes: string[];
-  sopNote: string;
-  options: DraftOption[];
-  agentQuestion: string;
-  urgent: boolean;
-  escalate: boolean;
-  createdAt: string;
-  engine: "local" | "anthropic" | "openai";
-}
-
-export interface ApprovalState {
-  status: ApprovalStatus;
-  approvedText: string | null;
-  candidateText: string | null;
-  optionId: ApprovalOptionId | null;
-  basedOnMessageId: string | null;
-  skippedAtMessageId: string | null;
-  notice: string;
-}
-
-export type ChangeKind = "tone" | "length" | "facts";
-
-export interface Correction {
-  id: string;
-  agent: string;
-  threadId: string;
-  customerPhone: string;
-  before: string;
-  after: string;
-  kinds: ChangeKind[];
-  at: string;
-  synced: boolean;
-}
-
-export interface OutboxItem {
-  id: string;
-  threadId: string;
-  to: string;
-  text: string;
-  at: string;
-  demo: boolean;
-}
-
-export type DraftStatus = "idle" | "drafting" | "ready" | "blocked" | "skipped" | "error";
-
 export interface ThreadView {
   id: string;
   customerPhone: string;
@@ -198,16 +123,9 @@ export interface ThreadView {
   }>;
   consent: ConsentWarning | null;
   card: QueueCard | null;
-  approval: ApprovalState;
-  draft: DraftBundle | null;
-  draftStatus: DraftStatus;
-  draftError: string | null;
-  correctionSummary: string;
-}
-
-export interface LearningView {
-  summary: string;
-  corrections: Correction[];
+  reservation: ReservationInfo | null;
+  facility: FacilityRecord | null;
+  matchedSops: MatchedSop[];
 }
 
 export interface PublicSettings {
@@ -218,13 +136,6 @@ export interface PublicSettings {
   hasRcJwt: boolean;
   rcLoggedIn: boolean;
   airtableTokenSet: boolean;
-  correctionsOptIn: boolean;
-  correctionsTableReady: boolean;
-  llmProvider: "anthropic" | "openai";
-  llmModel: string;
-  llmKeySet: boolean;
-  agentName: string;
-  signature: string;
   notificationsEnabled: boolean;
   alwaysOnTop: boolean;
   available: boolean;
@@ -239,8 +150,6 @@ export interface ConnectionState {
   subscription: "off" | "live" | "reconnecting";
   airtable: "demo" | "connected" | "off" | "error";
   airtableDetail: string;
-  llm: "demo" | "ready" | "off" | "error";
-  llmDetail: string;
 }
 
 export interface AppSnapshot {
@@ -250,8 +159,6 @@ export interface AppSnapshot {
   flagged: FlaggedCard[];
   selectedThreadId: string | null;
   thread: ThreadView | null;
-  learning: LearningView;
-  outbox: OutboxItem[];
   banner: string | null;
 }
 
@@ -265,26 +172,12 @@ export interface SettingsPatch {
   clearRcJwt?: boolean;
   airtableToken?: string;
   clearAirtableToken?: boolean;
-  llmApiKey?: string;
-  clearLlmApiKey?: boolean;
-  llmProvider?: "anthropic" | "openai";
-  llmModel?: string;
-  agentName?: string;
-  signature?: string;
   notificationsEnabled?: boolean;
   alwaysOnTop?: boolean;
-  correctionsOptIn?: boolean;
   consentPhones?: ConsentWarning[];
 }
 
-export interface CommandResult {
-  ok: boolean;
-  message: string;
-  openConfirm?: boolean;
-  confirmText?: string;
-}
-
-export interface SendResult {
+export interface ActionResult {
   ok: boolean;
   message: string;
 }
@@ -295,14 +188,11 @@ export interface YsrApi {
   setAvailable(value: boolean): Promise<void>;
   setAlwaysOnTop(value: boolean): Promise<void>;
   selectThread(threadId: string | null): Promise<void>;
-  runCommand(threadId: string, command: string): Promise<CommandResult>;
-  confirmSend(threadId: string, text: string): Promise<SendResult>;
-  saveSettings(patch: SettingsPatch): Promise<SendResult>;
-  testRingCentral(): Promise<SendResult>;
-  testAirtable(): Promise<SendResult>;
-  startOAuth(): Promise<SendResult>;
-  disconnectRingCentral(): Promise<SendResult>;
-  createCorrectionsTable(): Promise<SendResult>;
-  simulateInbound(): Promise<SendResult>;
+  saveSettings(patch: SettingsPatch): Promise<ActionResult>;
+  testRingCentral(): Promise<ActionResult>;
+  testAirtable(): Promise<ActionResult>;
+  startOAuth(): Promise<ActionResult>;
+  disconnectRingCentral(): Promise<ActionResult>;
+  simulateInbound(): Promise<ActionResult>;
   getPanelHint(): Promise<PanelId[]>;
 }

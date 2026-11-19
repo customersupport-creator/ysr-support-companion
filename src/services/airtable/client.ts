@@ -1,24 +1,6 @@
 import { AIRTABLE, SUPPORT_LINE_E164 } from "../../shared/constants";
 import { toE164 } from "../../core/format";
-import type { Correction, FacilityRecord, SmsMessage, SopRecord } from "../../shared/types";
-
-const PROTECTED_TABLES = new Set<string>([
-  AIRTABLE.sopsTableId,
-  AIRTABLE.messagesTableId,
-  AIRTABLE.qaTableId,
-  AIRTABLE.facilityTableId,
-]);
-
-const CORRECTION_FIELDS = [
-  "Correction",
-  "Agent",
-  "Thread ID",
-  "Customer Phone",
-  "Before",
-  "After",
-  "Change Kinds",
-  "Created At",
-] as const;
+import type { FacilityRecord, SmsMessage, SopRecord } from "../../shared/types";
 
 interface AirtableRecord {
   id: string;
@@ -30,11 +12,6 @@ interface ListResponse {
   offset?: string;
 }
 
-interface TableSchema {
-  id: string;
-  name: string;
-  fields?: Array<{ name: string }>;
-}
 
 function text(value: unknown): string {
   if (value == null) return "";
@@ -44,16 +21,10 @@ function text(value: unknown): string {
 }
 
 export class AirtableClient {
-  private correctionsTableId: string | null = null;
-
   constructor(
     private readonly token: string,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
-
-  setCorrectionsTableId(id: string | null): void {
-    this.correctionsTableId = id;
-  }
 
   async listSops(): Promise<SopRecord[]> {
     const records = await this.listAll(AIRTABLE.qaBaseId, AIRTABLE.sopsTableId);
@@ -65,7 +36,6 @@ export class AirtableClient {
       matchKeywords: text(record.fields["Match Keywords"]),
       lookups: text(record.fields.Lookups),
       steps: text(record.fields.Steps),
-      suggestedReplies: text(record.fields["Suggested Replies"]),
       escalateTo: text(record.fields["Escalate To"]),
       notes: text(record.fields.Notes),
       status: text(record.fields.Status),
@@ -134,110 +104,6 @@ export class AirtableClient {
         email: text(record.fields["EMAIL ADDRESS"]),
       };
     });
-  }
-
-  /**
-   * Looks for AGENT_CORRECTIONS and reports missing columns.
-   * Does not create, rename, or alter any table.
-   */
-  async inspectCorrectionsTable(): Promise<{ id: string; missingFields: string[] } | null> {
-    const table = await this.findTable(AIRTABLE.qaBaseId, AIRTABLE.correctionsTableName);
-    if (!table) {
-      this.correctionsTableId = null;
-      return null;
-    }
-    const names = new Set((table.fields ?? []).map((field) => field.name));
-    const missingFields = CORRECTION_FIELDS.filter((field) => !names.has(field));
-    this.correctionsTableId = missingFields.length === 0 ? table.id : null;
-    return { id: table.id, missingFields };
-  }
-
-  /**
-   * Creates AGENT_CORRECTIONS only when that exact table is absent.
-   * Refuses to update an existing table, even one with the same name.
-   */
-  async createCorrectionsTable(): Promise<string> {
-    const existing = await this.findTable(AIRTABLE.qaBaseId, AIRTABLE.correctionsTableName);
-    if (existing) {
-      const names = new Set((existing.fields ?? []).map((field) => field.name));
-      const missing = CORRECTION_FIELDS.filter((field) => !names.has(field));
-      if (missing.length > 0) {
-        throw new Error(
-          `AGENT_CORRECTIONS already exists and is missing: ${missing.join(", ")}. This app will not modify it. Add those fields by hand, or remove the empty table and create it again here.`,
-        );
-      }
-      this.correctionsTableId = existing.id;
-      return existing.id;
-    }
-    const response = await this.fetchImpl(`https://api.airtable.com/v0/meta/bases/${AIRTABLE.qaBaseId}/tables`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
-        name: AIRTABLE.correctionsTableName,
-        description:
-          "Opt-in log of YSR Desk agent edits. Created by the desktop app. Not part of the original BeeTexting tables.",
-        fields: CORRECTION_FIELDS.map((name) => ({
-          name,
-          type: name === "Before" || name === "After" ? "multilineText" : "singleLineText",
-        })),
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(`Could not create AGENT_CORRECTIONS (${response.status}). The token needs schema.bases:write and base-creator access.`);
-    }
-    const json = (await response.json()) as { id?: string };
-    if (!json.id) throw new Error("Airtable did not return a table id.");
-    this.correctionsTableId = json.id;
-    return json.id;
-  }
-
-  async addCorrection(correction: Correction): Promise<void> {
-    if (!this.correctionsTableId) throw new Error("AGENT_CORRECTIONS is not ready.");
-    this.assertWritable(this.correctionsTableId);
-    const response = await this.fetchImpl(
-      `https://api.airtable.com/v0/${AIRTABLE.qaBaseId}/${this.correctionsTableId}`,
-      {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({
-          records: [
-            {
-              fields: {
-                Correction: `${correction.agent} ${correction.at}`.slice(0, 200),
-                Agent: correction.agent,
-                "Thread ID": correction.threadId,
-                "Customer Phone": correction.customerPhone,
-                Before: correction.before,
-                After: correction.after,
-                "Change Kinds": correction.kinds.join(", "),
-                "Created At": correction.at,
-              },
-            },
-          ],
-        }),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Could not append a correction (${response.status}).`);
-    }
-  }
-
-  private assertWritable(tableId: string): void {
-    if (PROTECTED_TABLES.has(tableId)) {
-      throw new Error("Refusing to write to an existing BeeTexting or facility table.");
-    }
-    if (tableId !== this.correctionsTableId) {
-      throw new Error("Refusing to write to a table that is not AGENT_CORRECTIONS.");
-    }
-  }
-
-  private async findTable(baseId: string, name: string): Promise<TableSchema | null> {
-    const response = await this.fetchImpl(`https://api.airtable.com/v0/meta/bases/${baseId}/tables`, {
-      headers: this.headers(),
-    });
-    if (!response.ok) throw new Error(`Airtable schema request failed (${response.status}).`);
-    const json = (await response.json()) as { tables?: TableSchema[] };
-    return json.tables?.find((table) => table.name === name) ?? null;
   }
 
   private async listAll(

@@ -1,20 +1,8 @@
-import { useState } from "react";
-import { SMS_SOFT_LIMIT } from "../../shared/constants";
 import type { AppSnapshot } from "../../shared/types";
+import { extractFacilityFacts } from "../../core/facilityFacts";
 import { formatWait } from "../../core/format";
 
-export function ThreadPanel({
-  snap,
-  note,
-  onCommand,
-  onOpenConfirm,
-}: {
-  snap: AppSnapshot;
-  note: string;
-  onCommand: (command: string) => void;
-  onOpenConfirm: (text: string) => void;
-}) {
-  const [command, setCommand] = useState("");
+export function ThreadPanel({ snap }: { snap: AppSnapshot }) {
   const thread = snap.thread;
   if (!thread) {
     return (
@@ -23,8 +11,7 @@ export function ThreadPanel({
       </section>
     );
   }
-  const blocked = thread.approval.status === "consent_blocked" || Boolean(thread.consent);
-  const approved = thread.approval.status === "approved" ? thread.approval.approvedText : null;
+  const facts = extractFacilityFacts(thread.facility?.notes ?? "");
   return (
     <section className="panel thread">
       <header className="thread-head">
@@ -36,13 +23,13 @@ export function ThreadPanel({
             <span> waiting {formatWait(Date.now() - Date.parse(thread.card.waitingSince))}</span>
           </p>
         ) : (
-          <p>No unanswered customer text.</p>
+          <p className="meta">No unanswered customer text.</p>
         )}
       </header>
-      {blocked ? (
+      {thread.consent ? (
         <div className="callout danger">
           <strong>Consent warning. Do not text.</strong>
-          <p>{thread.consent?.reason ?? thread.approval.notice}</p>
+          <p>{thread.consent.reason}</p>
         </div>
       ) : null}
       <ol className="transcript">
@@ -53,102 +40,50 @@ export function ThreadPanel({
           </li>
         ))}
       </ol>
-      {thread.draftStatus === "drafting" ? <p className="empty">Drafting from the playbook…</p> : null}
-      {thread.draftStatus === "error" ? <p className="callout danger">{thread.draftError}</p> : null}
-      {thread.draftStatus === "skipped" ? <p className="callout">{thread.approval.notice}</p> : null}
-      {thread.draft && !blocked ? (
-        <div className="draft">
-          <h3>What they need</h3>
-          <p>{thread.draft.concern}</p>
-          <p className="meta">
-            Mood: {thread.draft.mood}
-            {thread.draft.facilityName ? ` · ${thread.draft.facilityName}` : ""}
-            {thread.draft.reservation?.rentalId ? ` · ${thread.draft.reservation.rentalId} (${thread.draft.reservation.status})` : ""}
+      {thread.reservation ? (
+        <div className="lookup">
+          <h3>Reservation in the thread</h3>
+          <p>
+            {thread.reservation.rentalId ?? "No rental ID"}
+            {thread.reservation.facility ? ` · ${thread.reservation.facility}` : ""}
+            {thread.reservation.plate ? ` · ${thread.reservation.plate}` : ""}
+            {` · ${thread.reservation.status}`}
           </p>
-          <p className="meta">{thread.draft.sopNote}</p>
-          {thread.draft.urgent ? <p className="meta">Escalate. Do not promise money or fault.</p> : null}
-          {thread.draft.disagreementNotes.map((item) => (
-            <p key={item} className="callout warn">
-              {item}
-            </p>
-          ))}
-          {thread.draft.agentQuestion ? <p className="meta">{thread.draft.agentQuestion}</p> : null}
-          {thread.correctionSummary ? <p className="meta">Your past edits: {thread.correctionSummary}</p> : null}
-          {thread.draft.matchedSops.map((match) => (
-            <details key={`${match.sop.number}-${match.sop.name}`}>
-              <summary>
-                SOP {match.sop.number} {match.sop.name}
-                {match.sop.source === "airtable" ? " · table" : " · playbook"}
-              </summary>
-              <p>{match.sop.steps}</p>
-              {match.sop.escalateTo ? <p>Escalate to: {match.sop.escalateTo}</p> : null}
-            </details>
-          ))}
-          {thread.draft.options.map((option) => (
-            <article key={option.id} className="option">
-              <header>
-                <strong>{option.id}</strong>
-                <span>{option.label}</span>
-                <span className={option.text.length > SMS_SOFT_LIMIT ? "len over" : "len"}>{option.text.length}/320</span>
-              </header>
-              <p>{option.text}</p>
-              <button type="button" disabled={blocked} onClick={() => onCommand(`APPROVE ${option.id}`)}>
-                APPROVE {option.id}
-              </button>
-            </article>
-          ))}
+        </div>
+      ) : (
+        <p className="meta">No rental ID in this thread.</p>
+      )}
+      {thread.facility ? (
+        <div className="lookup">
+          <h3>{thread.facility.name}</h3>
+          <p>{thread.facility.address}</p>
+          <p className="meta">
+            {thread.facility.facilityId}
+            {thread.facility.status ? ` · ${thread.facility.status}` : ""}
+            {thread.facility.towingCompany ? ` · Tow: ${thread.facility.towingCompany}` : ""}
+            {thread.facility.salesTowAuthorization ? ` · Sales tow: ${thread.facility.salesTowAuthorization}` : ""}
+          </p>
+          {thread.facility.doNotTowPlates ? <p className="meta">Do not tow: {thread.facility.doNotTowPlates}</p> : null}
+          {facts.gateCode ? <p>Gate code on file: {facts.gateCode}</p> : null}
+          {facts.sizeLimit ? <p>Size limit: {facts.sizeLimit}</p> : null}
+          {facts.directions ? <p>Directions: {facts.directions}</p> : null}
+          {thread.facility.notes ? <p className="notes">{thread.facility.notes}</p> : null}
         </div>
       ) : null}
-      {thread.approval.status === "mine_logged" && thread.approval.candidateText ? (
-        <article className="option mine">
-          <header>
-            <strong>MINE</strong>
-            <span>Your text, unchanged, not approved</span>
-          </header>
-          <pre className="exact">{thread.approval.candidateText}</pre>
-          <button type="button" onClick={() => onCommand("APPROVE")}>
-            APPROVE this text
-          </button>
-        </article>
-      ) : null}
-      {approved ? (
-        <button type="button" className="send wide" onClick={() => onOpenConfirm(approved)}>
-          Review and send approved text
-        </button>
-      ) : null}
-      {thread.approval.notice ? <p className="meta">{thread.approval.notice}</p> : null}
-      <div className="command-row">
-        <button type="button" disabled={blocked} onClick={() => onCommand("REJECT")}>
-          REJECT
-        </button>
-        <button type="button" disabled={blocked} onClick={() => onCommand("SKIP")}>
-          SKIP
-        </button>
-        <button type="button" disabled={blocked} onClick={() => onCommand("REDRAFT")}>
-          REDRAFT
-        </button>
-      </div>
-      <form
-        className="command-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!command.trim()) return;
-          onCommand(command);
-          setCommand("");
-        }}
-      >
-        <label htmlFor="command">Command</label>
-        <textarea
-          id="command"
-          value={command}
-          placeholder="APPROVE A, EDIT: make it shorter, MINE: your exact text, REJECT, SKIP"
-          onChange={(event) => setCommand(event.target.value)}
-        />
-        <button type="submit" disabled={blocked || !command.trim()}>
-          Run
-        </button>
-      </form>
-      {note ? <p className="footnote">{note}</p> : null}
+      <h3>Matched SOPs</h3>
+      {thread.matchedSops.length === 0 ? <p className="empty">No SOP keyword match on the latest customer texts.</p> : null}
+      {thread.matchedSops.map((match) => (
+        <details key={`${match.sop.number}-${match.sop.name}`} open>
+          <summary>
+            SOP {match.sop.number} {match.sop.name}
+            <span>{match.sop.source === "airtable" ? "Airtable" : "Playbook list"}</span>
+          </summary>
+          {match.sop.lookups ? <p>Look up: {match.sop.lookups}</p> : null}
+          {match.sop.steps ? <p>{match.sop.steps}</p> : null}
+          {match.sop.escalateTo ? <p>Escalate to: {match.sop.escalateTo}</p> : null}
+          {match.sop.notes ? <p className="meta">{match.sop.notes}</p> : null}
+        </details>
+      ))}
     </section>
   );
 }

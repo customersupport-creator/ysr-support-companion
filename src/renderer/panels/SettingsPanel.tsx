@@ -11,15 +11,10 @@ export function SettingsPanel({
   onNote: (note: string) => void;
 }) {
   const settings = snap.settings;
-  const [agentName, setAgentName] = useState(settings.agentName);
-  const [signature, setSignature] = useState(settings.signature);
   const [clientId, setClientId] = useState(settings.rcClientId);
   const [secret, setSecret] = useState("");
   const [jwt, setJwt] = useState("");
   const [airtable, setAirtable] = useState("");
-  const [llmKey, setLlmKey] = useState("");
-  const [model, setModel] = useState(settings.llmModel);
-  const [provider, setProvider] = useState(settings.llmProvider);
   const [server, setServer] = useState(settings.rcServer);
   const [consentText, setConsentText] = useState(
     settings.consentPhones.map((item) => `${item.phone} | ${item.reason}`).join("\n"),
@@ -32,22 +27,14 @@ export function SettingsPanel({
 
   return (
     <section className="panel settings">
-      <h2>Agent</h2>
-      <label>
-        Display name
-        <input value={agentName} onChange={(event) => setAgentName(event.target.value)} />
-      </label>
-      <label>
-        Signature, added to drafted texts only
-        <input value={signature} onChange={(event) => setSignature(event.target.value)} placeholder="- Maya, YSR" />
-      </label>
+      <h2>Desk</h2>
       <label className="check">
         <input
           type="checkbox"
           checked={settings.notificationsEnabled}
           onChange={(event) => void save({ notificationsEnabled: event.target.checked })}
         />
-        Windows toasts when you are Available
+        Windows toast once a number has been waiting 5 minutes
       </label>
       <label className="check">
         <input
@@ -55,14 +42,12 @@ export function SettingsPanel({
           checked={settings.demoMode}
           onChange={(event) => void save({ demoMode: event.target.checked })}
         />
-        Demo mode (sample threads, no network sends)
+        Demo mode (sample threads, no network)
       </label>
-      <button type="button" onClick={() => void save({ agentName, signature })}>
-        Save name and signature
-      </button>
+      <p className="meta">{snap.connection.ringcentralDetail}</p>
 
       <h2>RingCentral</h2>
-      <p className="meta">{snap.connection.ringcentralDetail}</p>
+      <p className="meta">Read only. This app does not send SMS.</p>
       <label>
         Server
         <select value={server} onChange={(event) => setServer(event.target.value as "production" | "sandbox")}>
@@ -106,7 +91,7 @@ export function SettingsPanel({
           Sign out
         </button>
       </div>
-      <p className="meta">Support line stays +1 312-999-5161. Secrets are sealed with Windows secure storage and are not written in plaintext.</p>
+      <p className="meta">Support line stays +1 312-999-5161. Secrets are sealed with Windows secure storage.</p>
 
       <h2>Airtable</h2>
       <p className="meta">{snap.connection.airtableDetail}</p>
@@ -122,30 +107,10 @@ export function SettingsPanel({
           Test read
         </button>
       </div>
-
-      <h2>LLM</h2>
-      <p className="meta">{snap.connection.llmDetail}</p>
-      <label>
-        Provider
-        <select value={provider} onChange={(event) => setProvider(event.target.value as "anthropic" | "openai")}>
-          <option value="anthropic">Anthropic Claude</option>
-          <option value="openai">OpenAI</option>
-        </select>
-      </label>
-      <label>
-        Model
-        <input value={model} onChange={(event) => setModel(event.target.value)} />
-      </label>
-      <label>
-        API key {settings.llmKeySet ? "(saved)" : ""}
-        <input type="password" value={llmKey} onChange={(event) => setLlmKey(event.target.value)} autoComplete="off" />
-      </label>
-      <button type="button" onClick={() => void save({ llmProvider: provider, llmModel: model, ...(llmKey ? { llmApiKey: llmKey } : {}) })}>
-        Save LLM
-      </button>
+      <p className="meta">Reads BEETEXTING_SOPS, the message log, and FACILITY INFORMATION. It does not write to those tables.</p>
 
       <h2>Consent warnings</h2>
-      <p className="meta">One per line: phone, then a vertical bar, then the reason. These contacts are flagged. The desk will not draft or send.</p>
+      <p className="meta">One per line: phone, then a vertical bar, then the reason. These contacts are flagged. The desk does not text anyone.</p>
       <textarea value={consentText} onChange={(event) => setConsentText(event.target.value)} rows={4} />
       <button
         type="button"
@@ -164,31 +129,6 @@ export function SettingsPanel({
       >
         Save consent list
       </button>
-
-      <h2>Optional Airtable learning</h2>
-      <div className="callout">
-        <p>
-          This creates a new table named AGENT_CORRECTIONS in BeeTexting QA. It does not modify BEETEXTING_SOPS,
-          BEETEXTING_MESSAGES, BEETEXTING_QA, or FACILITY INFORMATION.
-        </p>
-        <ol>
-          <li>Token scopes for everyday use: data.records:read and schema.bases:read, with both bases attached.</li>
-          <li>Add data.records:write and schema.bases:write only if you want this sync. You must be a base creator.</li>
-          <li>Check the box, save, then create the table. If it already exists, the app uses it and will not change its fields.</li>
-        </ol>
-      </div>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={settings.correctionsOptIn}
-          onChange={(event) => void save({ correctionsOptIn: event.target.checked })}
-        />
-        Opt in to sync my edits to AGENT_CORRECTIONS
-      </label>
-      <button type="button" disabled={!settings.correctionsOptIn} onClick={() => void api.createCorrectionsTable().then((result) => onNote(result.message))}>
-        Create AGENT_CORRECTIONS table
-      </button>
-      <p className="meta">{settings.correctionsTableReady ? "Table is ready." : "Table is not confirmed yet."}</p>
     </section>
   );
 }

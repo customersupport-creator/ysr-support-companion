@@ -4,7 +4,8 @@ import type { SmsMessage } from "../src/shared/types";
 import { attentionHeadline } from "../src/core/format";
 import { assessNeedsReply, queueFromThreads } from "../src/core/needsReply";
 import { isReactionMessage } from "../src/core/reactions";
-import { classifyUrgency, renotifyIntervalMs } from "../src/core/urgency";
+import { shouldAlertForWait } from "../src/core/alerts";
+import { classifyUrgency } from "../src/core/urgency";
 import { groupThreads } from "../src/core/messages";
 
 const PHONE = "+16479895702";
@@ -164,9 +165,9 @@ describe("urgency", () => {
     expect(result.urgent).toBe(false);
   });
 
-  it("renotifies red every 2 minutes and yellow every 5, and not green", () => {
-    expect(renotifyIntervalMs("RED")).toBe(2 * 60 * 1000);
-    expect(renotifyIntervalMs("YELLOW")).toBe(5 * 60 * 1000);
-    expect(renotifyIntervalMs("GREEN")).toBeNull();
+  it("alerts only after five minutes, once the wait has crossed that line", () => {
+    expect(shouldAlertForWait(4 * 60 * 1000)).toBe(false);
+    expect(shouldAlertForWait(5 * 60 * 1000)).toBe(true);
+    expect(shouldAlertForWait(11 * 60 * 1000)).toBe(true);
   });
 });

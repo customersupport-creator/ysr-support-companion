@@ -9,12 +9,12 @@ export function createTray(options: {
 }): Tray {
   const image = nativeImage.createFromPath(options.iconPath);
   const tray = new Tray(image.isEmpty() ? nativeImage.createFromDataURL(FALLBACK_ICON) : image);
-  tray.setToolTip("YSR Desk");
+  tray.setToolTip("YourSpotRented");
   const refresh = () => {
     const available = options.isAvailable();
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: "Show YSR Desk", click: options.onShow },
+        { label: "Show YourSpotRented", click: options.onShow },
         {
           label: available ? "Set away" : "Set available",
           click: () => options.onToggleAvailable(!available),

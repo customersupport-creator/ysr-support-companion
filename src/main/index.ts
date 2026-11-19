@@ -60,18 +60,6 @@ app.whenReady().then(async () => {
     return engine.saveSettings({ alwaysOnTop: on });
   });
   ipcMain.handle("ysr:select-thread", (_event, threadId: string | null) => engine.selectThread(threadId));
-  ipcMain.handle("ysr:run-command", (_event, threadId: string, command: string) => {
-    if (typeof threadId !== "string" || typeof command !== "string" || command.length > 4000) {
-      return { ok: false, message: "That command was not accepted." };
-    }
-    return engine.runCommand(threadId, command);
-  });
-  ipcMain.handle("ysr:confirm-send", (_event, threadId: string, text: string) => {
-    if (typeof threadId !== "string" || typeof text !== "string") {
-      return { ok: false, message: "That send was not accepted." };
-    }
-    return engine.confirmSend(threadId, text);
-  });
   ipcMain.handle("ysr:save-settings", (_event, patch: unknown) => {
     if (!patch || typeof patch !== "object") return { ok: false, message: "Settings were not saved." };
     return engine.saveSettings(patch as SettingsPatch);
@@ -80,7 +68,6 @@ app.whenReady().then(async () => {
   ipcMain.handle("ysr:test-airtable", () => engine.testAirtable());
   ipcMain.handle("ysr:start-oauth", () => engine.startOAuth());
   ipcMain.handle("ysr:disconnect", () => engine.disconnectRingCentral());
-  ipcMain.handle("ysr:create-corrections-table", () => engine.createCorrectionsTable());
   ipcMain.handle("ysr:simulate", () => engine.simulateInbound());
   ipcMain.handle("ysr:panels", () => panelIds());
 

@@ -1,4 +1,4 @@
-import { GENERAL_LIMIT_PER_MIN, MESSAGE_STORE_LIMIT_PER_MIN, SUPPORT_LINE_E164 } from "../../shared/constants";
+import { GENERAL_LIMIT_PER_MIN, MESSAGE_STORE_LIMIT_PER_MIN } from "../../shared/constants";
 import { retryDelayMs, SlidingWindowLimiter } from "../../core/rateLimit";
 import { mapRcMessage } from "./mapMessage";
 import type { SmsMessage } from "../../shared/types";
@@ -114,21 +114,6 @@ export class RingCentralClient {
       .map((record) => mapRcMessage(record))
       .filter((message): message is SmsMessage => message != null);
     return { messages, syncToken: json.syncInfo?.syncToken ?? null };
-  }
-
-  /** Send one SMS. Callers must already have passed the approval gate. */
-  async sendSms(toE164: string, text: string): Promise<{ id: string }> {
-    const response = await this.request("POST", "/restapi/v1.0/account/~/extension/~/sms", {
-      from: { phoneNumber: SUPPORT_LINE_E164 },
-      to: [{ phoneNumber: toE164 }],
-      text,
-    });
-    if (!response.ok) {
-      throw new Error(`RingCentral refused the SMS (${response.status}). Nothing else was sent.`);
-    }
-    const json = (await response.json()) as { id?: string | number };
-    if (!json.id) throw new Error("RingCentral accepted the request but returned no message id.");
-    return { id: String(json.id) };
   }
 
   private async tokenRequest(fields: Record<string, string>): Promise<RcTokens> {

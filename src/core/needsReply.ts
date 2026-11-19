@@ -44,11 +44,7 @@ export function assessNeedsReply(messages: SmsMessage[], nowMs: number): ReplyAs
 
 const URGENCY_RANK: Record<QueueCard["urgency"], number> = { RED: 0, YELLOW: 1, GREEN: 2 };
 
-export function queueFromThreads(
-  threads: Thread[],
-  nowMs: number,
-  skippedThreadIds: ReadonlySet<string> = new Set(),
-): QueueCard[] {
+export function queueFromThreads(threads: Thread[], nowMs: number): QueueCard[] {
   const cards: QueueCard[] = [];
   for (const thread of threads) {
     if (thread.consentWarning) continue;
@@ -66,7 +62,6 @@ export function queueFromThreads(
       urgency: urgency.urgency,
       urgent: urgency.urgent,
       reasons: urgency.reasons,
-      skipped: skippedThreadIds.has(thread.id),
       lastCustomerMessageId: assessment.message.id,
       key: `${thread.id}:${assessment.message.id}`,
     });
