@@ -11,6 +11,7 @@ extraResources:
   - from: resources
     to: .
 asar: true
+publish: null
 win:
   target:
     - target: nsis
