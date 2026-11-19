@@ -30,6 +30,9 @@ app.whenReady().then(async () => {
 
   engine.attachWindow(win);
   engine.setShowWindow(show);
+  win.on("focus", () => {
+    if (!win.isDestroyed()) win.flashFrame(false);
+  });
   win.on("close", (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -68,6 +71,7 @@ app.whenReady().then(async () => {
     if (typeof phone !== "string") return { ok: false, message: "Could not restore that number." };
     return engine.unresolvePhone(phone);
   });
+  ipcMain.handle("ysr:mark-urgent-seen", () => engine.markUrgentSeen());
   ipcMain.handle("ysr:open-number", (_event, phone: string) => {
     if (typeof phone !== "string") return { ok: false, message: "Could not open that number." };
     return engine.openNumber(phone);

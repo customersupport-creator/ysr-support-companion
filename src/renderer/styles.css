@@ -311,7 +311,63 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .settings button:hover { background: var(--ysr-teal-80); color: var(--ysr-white); }
 
+.bell-wrap { position: relative; }
+.bell {
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  border-radius: 99px;
+  color: var(--ysr-teal);
+  position: relative;
+}
+.bell svg { width: 20px; height: 20px; display: block; margin: 0 auto; }
+.bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: var(--ysr-urgent);
+  color: var(--ysr-white);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 4px;
+}
+.bell-panel {
+  position: fixed;
+  top: 62px;
+  right: 12px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  background: var(--ysr-white);
+  border: 1px solid var(--ysr-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, 0.12);
+  z-index: 5;
+  padding: 10px;
+}
+.bell-panel ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bell-head, .bell-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bell-item {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 500;
+}
+.bell-panel li { border-top: 1px solid var(--ysr-border); padding-top: 8px; }
+.bell-panel li.unseen { background: #fef2f2; border-radius: 8px; padding: 8px; }
+.bell-panel q { quotes: none; color: var(--ysr-text-secondary); }
+
 @media (max-width: 380px) {
   .top-actions .pin { display: none; }
-  .command-row { flex-wrap: wrap; }
+  .command-row, .card-actions { flex-wrap: wrap; }
 }

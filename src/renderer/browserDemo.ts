@@ -2,7 +2,7 @@ import { SUPPORT_LINE_DISPLAY } from "../shared/constants";
 import type { AppSnapshot, PublicSettings, ActionResult, SettingsPatch, YsrApi } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
 import { toE164 } from "../core/format";
-import { RINGCENTRAL_WEB_SMS, ringCentralSmsUrl } from "../core/ringcentralLink";
+import { BEETEXTING_HOME, RINGCENTRAL_WEB_SMS, beeTextingUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { DeskSession } from "../core/session";
 import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
 import { PLAYBOOK_SOPS } from "../demo/playbookSops";
@@ -19,7 +19,9 @@ export function createBrowserDemo(): YsrApi {
   let available = true;
   let alwaysOnTop = false;
   let notificationsEnabled = true;
-  let openNumbersIn: "desktop" | "web" = "desktop";
+  let openNumbersIn: "beetexting" | "desktop" | "web" = "beetexting";
+  let beeTextingTemplate = BEETEXTING_HOME;
+  let urgentSound = true;
   let banner: string | null = "Demo mode. This desk does not send texts.";
   const alerted = new Set<string>();
   const listeners = new Set<(snapshot: AppSnapshot) => void>();
@@ -36,6 +38,8 @@ export function createBrowserDemo(): YsrApi {
     alwaysOnTop,
     available,
     openNumbersIn,
+    beeTextingTemplate,
+    urgentSound,
     consentPhones: DEMO_CONSENT,
     secureStorage: false,
   });
@@ -55,12 +59,18 @@ export function createBrowserDemo(): YsrApi {
     selectedThreadId: session.selectedId,
     thread: session.threadView(),
     resolvedToday: session.resolvedToday(),
+    urgentItems: session.urgentItems(),
+    unseenUrgentCount: session.unseenUrgentCount(),
     banner,
   });
 
+  const notify = () => {
+    for (const listener of listeners) listener(snapshot());
+  };
+
   const emit = () => {
     noteQueue();
-    for (const listener of listeners) listener(snapshot());
+    notify();
   };
 
   function noteQueue(): void {
@@ -70,6 +80,7 @@ export function createBrowserDemo(): YsrApi {
     }
     if (!available || !notificationsEnabled) return;
     for (const card of session.queue()) {
+      if (card.urgent) continue;
       if (!shouldAlertForWait(card.waitMs) || alerted.has(card.customerPhone)) continue;
       alerted.add(card.customerPhone);
       banner = card.headline;
@@ -117,7 +128,25 @@ export function createBrowserDemo(): YsrApi {
       emit();
       return { ok: true, message: banner };
     },
+    markUrgentSeen: async () => {
+      session.markUrgentSeen();
+      emit();
+    },
     openNumber: async (phone) => {
+      if (openNumbersIn === "beetexting") {
+        const url = beeTextingUrl(beeTextingTemplate, phone);
+        try {
+          await navigator.clipboard.writeText(toE164(phone));
+        } catch {
+          /* clipboard may be blocked in the browser demo */
+        }
+        window.open(url, "_blank", "noopener");
+        const message = "Number copied, paste it in BeeTexting search";
+        emit();
+        banner = message;
+        notify();
+        return { ok: true, message };
+      }
       if (openNumbersIn === "web") {
         try {
           await navigator.clipboard.writeText(toE164(phone));
@@ -125,14 +154,18 @@ export function createBrowserDemo(): YsrApi {
           /* clipboard may be blocked in the browser demo */
         }
         window.open(RINGCENTRAL_WEB_SMS, "_blank", "noopener");
-        banner = "Number copied, paste it in RingCentral search";
+        const message = "Number copied, paste it in RingCentral search";
         emit();
-        return { ok: true, message: banner };
+        banner = message;
+        notify();
+        return { ok: true, message };
       }
       const url = ringCentralSmsUrl(phone);
-      banner = `Demo would open ${url}`;
+      const message = `Demo would open ${url}`;
       emit();
-      return { ok: true, message: banner };
+      banner = message;
+      notify();
+      return { ok: true, message };
     },
     copyText: async (text) => {
       try {
@@ -143,9 +176,21 @@ export function createBrowserDemo(): YsrApi {
       return { ok: true, message: "Copied." };
     },
     saveSettings: async (patch: SettingsPatch) => {
+      if (patch.beeTextingTemplate != null) {
+        const next = patch.beeTextingTemplate.trim() || BEETEXTING_HOME;
+        if (!next.startsWith("https://app.beetexting.com/")) {
+          return { ok: false, message: "BeeTexting links must start with https://app.beetexting.com/" };
+        }
+      }
       if (patch.alwaysOnTop != null) alwaysOnTop = patch.alwaysOnTop;
       if (patch.notificationsEnabled != null) notificationsEnabled = patch.notificationsEnabled;
-      if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web") openNumbersIn = patch.openNumbersIn;
+      if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web" || patch.openNumbersIn === "beetexting") {
+        openNumbersIn = patch.openNumbersIn;
+      }
+      if (patch.beeTextingTemplate != null) {
+        beeTextingTemplate = patch.beeTextingTemplate.trim() || BEETEXTING_HOME;
+      }
+      if (patch.urgentSound != null) urgentSound = patch.urgentSound;
       banner = "Browser demo keeps settings in this tab only.";
       emit();
       return { ok: true, message: banner };

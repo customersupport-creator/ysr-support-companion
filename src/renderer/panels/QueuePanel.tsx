@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AppSnapshot, QueueCard } from "../../shared/types";
 import { shouldAlertForWait } from "../../core/alerts";
 import { formatPhoneDisplay, formatWait } from "../../core/format";
+import { openActionLabel } from "../../core/ringcentralLink";
 import { RentalChips } from "../components/RentalChips";
 
 export function QueuePanel({
@@ -22,6 +23,7 @@ export function QueuePanel({
   onOpenNumber: (phone: string) => void;
 }) {
   const now = useNow();
+  const openLabel = openActionLabel(snap.settings.openNumbersIn);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -37,7 +39,15 @@ export function QueuePanel({
       <ul className="cards">
         {snap.queue.map((card) => (
           <li key={card.key}>
-            <Card card={card} now={now} onOpen={onOpen} onResolve={onResolve} onCopy={onCopy} onOpenNumber={onOpenNumber} />
+            <Card
+              card={card}
+              now={now}
+              openLabel={openLabel}
+              onOpen={onOpen}
+              onResolve={onResolve}
+              onCopy={onCopy}
+              onOpenNumber={onOpenNumber}
+            />
           </li>
         ))}
       </ul>
@@ -69,9 +79,11 @@ function Card({
   onResolve,
   onCopy,
   onOpenNumber,
+  openLabel,
 }: {
   card: QueueCard;
   now: number;
+  openLabel: string;
   onOpen: (id: string) => void;
   onResolve: (id: string) => void;
   onCopy: (id: string) => Promise<void> | void;
@@ -102,7 +114,7 @@ function Card({
         <RentalChips ids={card.rentalIds} onCopy={onCopy} />
         <span className="card-actions">
           <button type="button" className="open-rc" onClick={() => onOpenNumber(card.customerPhone)}>
-            Open in RingCentral
+            {openLabel}
           </button>
           <button type="button" className="resolve" onClick={() => onResolve(card.threadId)}>
             Resolve

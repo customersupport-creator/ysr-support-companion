@@ -1,6 +1,7 @@
 import type { AppSnapshot } from "../../shared/types";
 import { extractFacilityFacts } from "../../core/facilityFacts";
 import { formatWait } from "../../core/format";
+import { openActionLabel } from "../../core/ringcentralLink";
 import { RentalChips } from "../components/RentalChips";
 
 export function ThreadPanel({
@@ -44,7 +45,7 @@ export function ThreadPanel({
       <div className="card-foot">
         <RentalChips ids={thread.rentalIds} onCopy={onCopy} />
         <button type="button" className="open-rc" onClick={() => onOpenNumber(thread.customerPhone)}>
-          Open in RingCentral
+          {openActionLabel(snap.settings.openNumbersIn)}
         </button>
         {thread.card ? (
           <button type="button" className="resolve" onClick={() => onResolve(thread.id)}>

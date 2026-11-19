@@ -16,6 +16,12 @@ const api: YsrApi = {
   unresolvePhone: (phone) => ipcRenderer.invoke("ysr:unresolve", phone) as Promise<ActionResult>,
   copyText: (text) => ipcRenderer.invoke("ysr:copy-text", text) as Promise<ActionResult>,
   openNumber: (phone) => ipcRenderer.invoke("ysr:open-number", phone) as Promise<ActionResult>,
+  markUrgentSeen: () => ipcRenderer.invoke("ysr:mark-urgent-seen") as Promise<void>,
+  onUrgentChime: (listener) => {
+    const wrapped = () => listener();
+    ipcRenderer.on("ysr:urgent-chime", wrapped);
+    return () => ipcRenderer.removeListener("ysr:urgent-chime", wrapped);
+  },
   saveSettings: (patch: SettingsPatch) => ipcRenderer.invoke("ysr:save-settings", patch) as Promise<ActionResult>,
   testRingCentral: () => ipcRenderer.invoke("ysr:test-ringcentral") as Promise<ActionResult>,
   testAirtable: () => ipcRenderer.invoke("ysr:test-airtable") as Promise<ActionResult>,

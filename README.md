@@ -18,9 +18,10 @@ npm run dev
 
 - Queue cards show wait time, a preview, and RED / YELLOW / GREEN from the playbook urgency rules.
 - A number waiting under 5 minutes stays on the queue and does not toast. At 5 minutes, Available agents get one alert for that number. A later text from the same number does not raise a second alert until the first one has been answered.
+- The header bell lists unresolved urgent threads (towing, damage, threats, stuck, and the other urgent keywords). The red badge is how many of those the agent has not marked seen. A new urgent thread toasts immediately while the agent is Available, plays a short sound (mute it in Settings), and flashes the taskbar. Away still updates the badge and does not play the sound. Mark seen clears the highlight. Resolve or an answer removes the item. Nothing is sent.
 - Each card shows rental IDs found in the thread (usually a 9-digit SpotHero id such as 138424128), with a copy button. The 5-minute toast includes the newest id when one is known.
 - Resolve removes that number from the queue on this computer only. It does not text the customer or change RingCentral. If they text again, the number comes back. Undo is available for a few seconds, and Resolved today lists what you hid today.
-- The phone number and **Open in RingCentral** open the RingCentral desktop SMS composer for that number (`rcapp://r/sms?type=new&number=...`). Nothing is prefilled. Settings can switch this to the RingCentral website, which copies the number so you can paste it into search. If the desktop app is not installed, the desk falls back to the website.
+- **Open in BeeTexting** is the default. It copies the customer number as `+1XXXXXXXXXX` and opens https://app.beetexting.com/ so you can paste it into BeeTexting search. Settings can store an optional conversation link on that same host, with `{number}`, `{number_e164}`, or `{number_digits}`, for the day BeeTexting documents a thread URL. RingCentral desktop and RingCentral web stay available. Desktop uses `rcapp://r/sms?type=new&number=...` with no message text, and falls back to the website if the app does not open. Nothing is sent.
 - Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text.
 
 ## Build the Windows installer

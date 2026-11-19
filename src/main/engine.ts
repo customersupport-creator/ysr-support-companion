@@ -1,10 +1,13 @@
-import { BrowserWindow, Notification, clipboard, shell } from "electron";
+import fs from "fs";
+import path from "path";
+import { BrowserWindow, NativeImage, Notification, clipboard, nativeImage, shell } from "electron";
 import { ALERT_TICK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS } from "../shared/constants";
 import type { ActionResult, AppSnapshot, SettingsPatch, SmsMessage } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
 import { attentionNotice } from "../core/rentalIds";
+import { urgentTitle } from "../core/urgentBell";
 import { toE164 } from "../core/format";
-import { RINGCENTRAL_WEB_SMS, assertAllowedExternalUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
+import { RINGCENTRAL_WEB_SMS, assertAllowedExternalUrl, beeTextingUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { isStopKeyword } from "../core/safety";
 import { DeskSession } from "../core/session";
 import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
@@ -26,6 +29,7 @@ export class DeskEngine {
   private alertTimer: ReturnType<typeof setInterval> | null = null;
   private syncToken: string | null = null;
   private alertedPhones = new Set<string>();
+  private alertedUrgent = new Set<string>();
   private seenFlags = new Set<string>();
   private suppressNotify = true;
   private showWindow: () => void = () => undefined;
@@ -48,6 +52,7 @@ export class DeskEngine {
       this.broadcast();
     });
     this.session.setResolved(this.store.loadResolved());
+    this.session.setUrgentSeen(this.store.loadUrgentSeen());
   }
 
   attachWindow(win: BrowserWindow): void {
@@ -86,6 +91,8 @@ export class DeskEngine {
       selectedThreadId: this.session.selectedId,
       thread: this.session.threadView(),
       resolvedToday: this.session.resolvedToday(),
+      urgentItems: this.session.urgentItems(),
+      unseenUrgentCount: this.session.unseenUrgentCount(),
       banner: this.banner,
     };
   }
@@ -108,6 +115,12 @@ export class DeskEngine {
     return { ok: true, message: `Resolved ${record.phone}` };
   }
 
+  async markUrgentSeen(): Promise<void> {
+    this.session.markUrgentSeen();
+    this.store.saveUrgentSeen(this.session.getUrgentSeen());
+    this.syncTaskbar();
+  }
+
   async unresolvePhone(phone: string): Promise<ActionResult> {
     this.session.unresolve(phone);
     this.store.saveResolved(this.session.getResolved());
@@ -115,8 +128,22 @@ export class DeskEngine {
     return { ok: true, message: "Back in the queue." };
   }
 
-  /** Opens the RingCentral SMS composer for this number. Never sends or prefills a message. */
+  /** Opens BeeTexting or RingCentral for this number. Never sends or prefills a message. */
   async openNumber(phone: string): Promise<ActionResult> {
+    if (this.store.openNumbersIn === "beetexting") {
+      try {
+        const url = beeTextingUrl(this.store.beeTextingTemplate, phone);
+        clipboard.writeText(toE164(phone));
+        await shell.openExternal(url);
+        const message = "Number copied, paste it in BeeTexting search";
+        this.announce(message);
+        return { ok: true, message };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not open BeeTexting.";
+        this.announce(message);
+        return { ok: false, message };
+      }
+    }
     if (this.store.openNumbersIn === "web") {
       const opened = await this.openInWeb(phone);
       this.announce(opened.message);
@@ -408,6 +435,7 @@ export class DeskEngine {
     }
     if (this.store.available && this.store.notificationsEnabled) {
       for (const card of queue) {
+        if (card.urgent) continue;
         if (!shouldAlertForWait(card.waitMs) || this.alertedPhones.has(card.customerPhone)) continue;
         this.alertedPhones.add(card.customerPhone);
         this.toast(attentionNotice(card.customerPhone, card.rentalIds), card.preview);
@@ -416,6 +444,46 @@ export class DeskEngine {
         if (this.seenFlags.has(flag.threadId)) continue;
         this.seenFlags.add(flag.threadId);
         this.toast("Do not text", flag.headline);
+      }
+    }
+    if (this.store.available) {
+      for (const card of queue) {
+        if (!card.urgent) continue;
+        const key = `${card.customerPhone}:${card.lastCustomerMessageId}`;
+        if (this.alertedUrgent.has(key)) continue;
+        this.alertedUrgent.add(key);
+        const detail = card.rentalIds[0] ? `Rental ID ${card.rentalIds[0]}. ${card.preview}` : card.preview;
+        this.toast(urgentTitle(card.displayPhone), detail);
+        for (const win of this.windows) {
+          if (win.isDestroyed()) continue;
+          win.flashFrame(true);
+          if (this.store.urgentSound) win.webContents.send("ysr:urgent-chime");
+        }
+      }
+    }
+    for (const key of this.alertedUrgent) {
+      const splitAt = key.indexOf(":");
+      const phone = key.slice(0, splitAt);
+      const messageId = key.slice(splitAt + 1);
+      if (!queue.some((card) => card.customerPhone === phone && card.lastCustomerMessageId === messageId)) {
+        this.alertedUrgent.delete(key);
+      }
+    }
+    this.syncTaskbar();
+  }
+
+  private syncTaskbar(): void {
+    const count = this.session.unseenUrgentCount();
+    for (const win of this.windows) {
+      if (win.isDestroyed()) continue;
+      try {
+        if (count > 0) win.setOverlayIcon(urgentOverlay(), `${count} urgent`);
+        else {
+          win.setOverlayIcon(null, "");
+          win.flashFrame(false);
+        }
+      } catch {
+        // Overlay icons are a Windows taskbar feature.
       }
     }
   }
@@ -442,6 +510,19 @@ export class DeskEngine {
       if (!win.isDestroyed()) win.webContents.send("ysr:snapshot", snapshot);
     }
   }
+}
+
+let overlayImage: NativeImage | null = null;
+
+function urgentOverlay(): NativeImage {
+  if (overlayImage) return overlayImage;
+  const candidates = [
+    path.join(process.resourcesPath, "urgent-overlay.png"),
+    path.join(__dirname, "../../resources/urgent-overlay.png"),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  overlayImage = found ? nativeImage.createFromPath(found) : nativeImage.createEmpty();
+  return overlayImage;
 }
 
 export function panelIds(): typeof PANEL_IDS {

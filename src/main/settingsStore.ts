@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { app, safeStorage } from "electron";
-import type { ConsentWarning, PublicSettings, ResolvedRecord, SettingsPatch } from "../shared/types";
+import type { ConsentWarning, PublicSettings, ResolvedRecord, SettingsPatch, UrgentSeenRecord } from "../shared/types";
 
 interface FileShape {
   demoMode: boolean;
@@ -10,7 +10,9 @@ interface FileShape {
   notificationsEnabled: boolean;
   alwaysOnTop: boolean;
   available: boolean;
-  openNumbersIn: "desktop" | "web";
+  openNumbersIn: "beetexting" | "desktop" | "web";
+  beeTextingTemplate: string;
+  urgentSound: boolean;
   consentPhones: ConsentWarning[];
   sealed: Record<string, string>;
 }
@@ -34,7 +36,9 @@ function defaults(): FileShape {
     notificationsEnabled: true,
     alwaysOnTop: false,
     available: true,
-    openNumbersIn: "desktop",
+    openNumbersIn: "beetexting",
+    beeTextingTemplate: "https://app.beetexting.com/",
+    urgentSound: true,
     consentPhones: [],
     sealed: {},
   };
@@ -45,11 +49,13 @@ export class SettingsStore {
   private memorySecrets: Secrets = emptySecrets();
   readonly path: string;
   readonly resolvedPath: string;
+  readonly urgentSeenPath: string;
 
   constructor() {
     const dir = app.getPath("userData");
     this.path = path.join(dir, "settings.json");
     this.resolvedPath = path.join(dir, "resolved.json");
+    this.urgentSeenPath = path.join(dir, "urgent-seen.json");
   }
 
   load(): void {
@@ -60,7 +66,14 @@ export class SettingsStore {
       consentPhones: Array.isArray(saved.consentPhones) ? saved.consentPhones : [],
       sealed: saved.sealed && typeof saved.sealed === "object" ? saved.sealed : {},
     };
-    this.file.openNumbersIn = this.file.openNumbersIn === "web" ? "web" : "desktop";
+    this.file.openNumbersIn =
+      this.file.openNumbersIn === "desktop" || this.file.openNumbersIn === "web" || this.file.openNumbersIn === "beetexting"
+        ? this.file.openNumbersIn
+        : "beetexting";
+    if (!this.file.beeTextingTemplate?.startsWith("https://app.beetexting.com/")) {
+      this.file.beeTextingTemplate = "https://app.beetexting.com/";
+    }
+    this.file.urgentSound = this.file.urgentSound !== false;
     this.memorySecrets = emptySecrets();
     for (const key of SECRET_KEYS) this.memorySecrets[key] = unseal(this.file.sealed[key] ?? "");
     this.memorySecrets.rcAccessExpiresAt = Number(unseal(this.file.sealed.rcAccessExpiresAt ?? "") || "0");
@@ -74,8 +87,16 @@ export class SettingsStore {
     return this.file.available;
   }
 
-  get openNumbersIn(): "desktop" | "web" {
-    return this.file.openNumbersIn === "web" ? "web" : "desktop";
+  get openNumbersIn(): "beetexting" | "desktop" | "web" {
+    return this.file.openNumbersIn;
+  }
+
+  get beeTextingTemplate(): string {
+    return this.file.beeTextingTemplate;
+  }
+
+  get urgentSound(): boolean {
+    return this.file.urgentSound !== false;
   }
 
   set available(value: boolean) {
@@ -127,19 +148,33 @@ export class SettingsStore {
       notificationsEnabled: this.file.notificationsEnabled,
       alwaysOnTop: this.file.alwaysOnTop,
       available: this.file.available,
-      openNumbersIn: this.file.openNumbersIn === "web" ? "web" : "desktop",
+      openNumbersIn: this.file.openNumbersIn,
+      beeTextingTemplate: this.file.beeTextingTemplate,
+      urgentSound: this.file.urgentSound !== false,
       consentPhones: this.file.consentPhones,
       secureStorage: this.secureStorageAvailable(),
     };
   }
 
   update(patch: SettingsPatch): { ok: boolean; message: string } {
+    if (patch.beeTextingTemplate != null) {
+      const next = patch.beeTextingTemplate.trim() || "https://app.beetexting.com/";
+      if (!next.startsWith("https://app.beetexting.com/")) {
+        return { ok: false, message: "BeeTexting links must start with https://app.beetexting.com/" };
+      }
+    }
     if (patch.demoMode != null) this.file.demoMode = patch.demoMode;
     if (patch.rcServer) this.file.rcServer = patch.rcServer;
     if (patch.rcClientId != null) this.file.rcClientId = patch.rcClientId.trim();
     if (patch.notificationsEnabled != null) this.file.notificationsEnabled = patch.notificationsEnabled;
     if (patch.alwaysOnTop != null) this.file.alwaysOnTop = patch.alwaysOnTop;
-    if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web") this.file.openNumbersIn = patch.openNumbersIn;
+    if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web" || patch.openNumbersIn === "beetexting") {
+      this.file.openNumbersIn = patch.openNumbersIn;
+    }
+    if (patch.beeTextingTemplate != null) {
+      this.file.beeTextingTemplate = patch.beeTextingTemplate.trim() || "https://app.beetexting.com/";
+    }
+    if (patch.urgentSound != null) this.file.urgentSound = patch.urgentSound;
     if (patch.consentPhones) this.file.consentPhones = patch.consentPhones.filter((item) => item.phone.trim());
     const secretError = this.applySecrets(patch);
     this.persist();
@@ -170,6 +205,20 @@ export class SettingsStore {
   saveResolved(records: ResolvedRecord[]): void {
     fs.mkdirSync(path.dirname(this.resolvedPath), { recursive: true });
     fs.writeFileSync(this.resolvedPath, JSON.stringify(records, null, 2), "utf8");
+  }
+
+  loadUrgentSeen(): UrgentSeenRecord[] {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.urgentSeenPath, "utf8")) as UrgentSeenRecord[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveUrgentSeen(records: UrgentSeenRecord[]): void {
+    fs.mkdirSync(path.dirname(this.urgentSeenPath), { recursive: true });
+    fs.writeFileSync(this.urgentSeenPath, JSON.stringify(records, null, 2), "utf8");
   }
 
   clearTokens(): void {

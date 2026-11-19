@@ -5,6 +5,8 @@ import type {
   QueueCard,
   ResolvedRecord,
   SmsMessage,
+  UrgentListItem,
+  UrgentSeenRecord,
   SopRecord,
   Thread,
   ThreadView,
@@ -18,6 +20,7 @@ import { extractRentalIds } from "./rentalIds";
 import { dropResolved, resolvedOnDay, upsertResolved } from "./resolved";
 import { parseReservation } from "./reservation";
 import { matchSops } from "./sopMatch";
+import { isUrgentUnseen, markUrgentSeen, urgentThreads } from "./urgentBell";
 
 export interface SessionOptions {
   now?: () => Date;
@@ -36,6 +39,7 @@ export class DeskSession {
   private facilities: FacilityRecord[];
   private consent: ConsentWarning[];
   private resolved: ResolvedRecord[] = [];
+  private urgentSeen: UrgentSeenRecord[] = [];
   private readonly now: () => Date;
 
   constructor(options: SessionOptions = {}) {
@@ -123,6 +127,39 @@ export class DeskSession {
 
   unresolve(phone: string): void {
     this.resolved = dropResolved(this.resolved, phone);
+    this.emit();
+  }
+
+  setUrgentSeen(records: UrgentSeenRecord[]): void {
+    this.urgentSeen = records.map((record) => ({ ...record, phone: toE164(record.phone) }));
+    this.emit();
+  }
+
+  getUrgentSeen(): UrgentSeenRecord[] {
+    return this.urgentSeen.map((record) => ({ ...record }));
+  }
+
+  urgentItems(): UrgentListItem[] {
+    return urgentThreads(this.queue()).map((card) => ({
+      threadId: card.threadId,
+      customerPhone: card.customerPhone,
+      displayPhone: card.displayPhone,
+      rentalIds: card.rentalIds,
+      preview: card.preview,
+      waitMs: card.waitMs,
+      waitingSince: card.waitingSince,
+      reasons: card.reasons,
+      unseen: isUrgentUnseen(card, this.urgentSeen),
+      lastCustomerMessageId: card.lastCustomerMessageId,
+    }));
+  }
+
+  unseenUrgentCount(): number {
+    return this.urgentItems().filter((item) => item.unseen).length;
+  }
+
+  markUrgentSeen(): void {
+    this.urgentSeen = markUrgentSeen(this.urgentSeen, this.queue());
     this.emit();
   }
 

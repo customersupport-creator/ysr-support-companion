@@ -16,6 +16,7 @@ export function SettingsPanel({
   const [jwt, setJwt] = useState("");
   const [airtable, setAirtable] = useState("");
   const [server, setServer] = useState(settings.rcServer);
+  const [beeLink, setBeeLink] = useState(settings.beeTextingTemplate);
   const [consentText, setConsentText] = useState(
     settings.consentPhones.map((item) => `${item.phone} | ${item.reason}`).join("\n"),
   );
@@ -40,15 +41,33 @@ export function SettingsPanel({
         Open numbers in
         <select
           value={settings.openNumbersIn}
-          onChange={(event) => void save({ openNumbersIn: event.target.value as "desktop" | "web" })}
+          onChange={(event) => void save({ openNumbersIn: event.target.value as "beetexting" | "desktop" | "web" })}
         >
+          <option value="beetexting">BeeTexting</option>
           <option value="desktop">RingCentral desktop app</option>
           <option value="web">RingCentral web</option>
         </select>
       </label>
+      <label>
+        BeeTexting conversation link (optional)
+        <input
+          value={beeLink}
+          onChange={(event) => setBeeLink(event.target.value)}
+          onBlur={() => void save({ beeTextingTemplate: beeLink })}
+          placeholder="https://app.beetexting.com/"
+        />
+      </label>
       <p className="meta">
-        The desktop app opens the SMS composer for that number. RingCentral has no link to an existing thread. Web copies the number and opens RingCentral in the browser.
+        BeeTexting is the default. The number is copied as +1XXXXXXXXXX and https://app.beetexting.com/ opens. A template may use {"{number}"}, {"{number_e164}"}, or {"{number_digits}"} and must stay on https://app.beetexting.com/. RingCentral desktop opens the SMS composer with no prefilled text. Web copies the number for RingCentral search.
       </p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.urgentSound}
+          onChange={(event) => void save({ urgentSound: event.target.checked })}
+        />
+        Play a sound for new urgent threads when Available
+      </label>
       <label className="check">
         <input
           type="checkbox"

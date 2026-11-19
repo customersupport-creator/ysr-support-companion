@@ -52,6 +52,25 @@ export interface ResolvedRecord {
   resolvedAt: string;
 }
 
+/** The urgent highlight was cleared for this exact customer message. */
+export interface UrgentSeenRecord {
+  phone: string;
+  lastCustomerMessageId: string;
+}
+
+export interface UrgentListItem {
+  threadId: string;
+  customerPhone: string;
+  displayPhone: string;
+  rentalIds: string[];
+  preview: string;
+  waitMs: number;
+  waitingSince: string;
+  reasons: string[];
+  unseen: boolean;
+  lastCustomerMessageId: string;
+}
+
 export interface FlaggedCard {
   threadId: string;
   customerPhone: string;
@@ -148,7 +167,9 @@ export interface PublicSettings {
   notificationsEnabled: boolean;
   alwaysOnTop: boolean;
   available: boolean;
-  openNumbersIn: "desktop" | "web";
+  openNumbersIn: "beetexting" | "desktop" | "web";
+  beeTextingTemplate: string;
+  urgentSound: boolean;
   consentPhones: ConsentWarning[];
   secureStorage: boolean;
 }
@@ -170,6 +191,8 @@ export interface AppSnapshot {
   selectedThreadId: string | null;
   thread: ThreadView | null;
   resolvedToday: ResolvedRecord[];
+  urgentItems: UrgentListItem[];
+  unseenUrgentCount: number;
   banner: string | null;
 }
 
@@ -185,7 +208,9 @@ export interface SettingsPatch {
   clearAirtableToken?: boolean;
   notificationsEnabled?: boolean;
   alwaysOnTop?: boolean;
-  openNumbersIn?: "desktop" | "web";
+  openNumbersIn?: "beetexting" | "desktop" | "web";
+  beeTextingTemplate?: string;
+  urgentSound?: boolean;
   consentPhones?: ConsentWarning[];
 }
 
@@ -204,6 +229,8 @@ export interface YsrApi {
   unresolvePhone(phone: string): Promise<ActionResult>;
   copyText(text: string): Promise<ActionResult>;
   openNumber(phone: string): Promise<ActionResult>;
+  markUrgentSeen(): Promise<void>;
+  onUrgentChime?(listener: () => void): () => void;
   saveSettings(patch: SettingsPatch): Promise<ActionResult>;
   testRingCentral(): Promise<ActionResult>;
   testAirtable(): Promise<ActionResult>;

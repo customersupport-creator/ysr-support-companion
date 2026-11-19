@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { SUPPORT_LINE_DISPLAY, type PanelId } from "../shared/constants";
 import type { AppSnapshot, YsrApi } from "../shared/types";
+import { UrgentBell } from "./components/UrgentBell";
 import { createBrowserDemo } from "./browserDemo";
 import { deskPanels } from "./panels/registry";
 import { QueuePanel } from "./panels/QueuePanel";
@@ -57,6 +58,23 @@ export function App() {
           <span>Support desk · {SUPPORT_LINE_DISPLAY}</span>
         </div>
         <div className="top-actions">
+          <UrgentBell
+            snap={snap}
+            onOpenThread={(threadId) => {
+              openThread(threadId);
+            }}
+            onResolve={(threadId) => {
+              const item = snap.urgentItems.find((entry) => entry.threadId === threadId);
+              void api.resolveThread(threadId).then((result) => {
+                if (!result.ok || !item) return;
+                setUndo({ phone: item.customerPhone, label: item.displayPhone });
+              });
+            }}
+            onOpenNumber={(phone) => {
+              void api.openNumber(phone).then((result) => setNote(result.message));
+            }}
+            onMarkSeen={() => void api.markUrgentSeen()}
+          />
           <button
             type="button"
             className={snap.settings.available ? "avail on" : "avail"}
