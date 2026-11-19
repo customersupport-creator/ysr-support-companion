@@ -30,7 +30,7 @@ npm install
 npm run dist:win
 ```
 
-The NSIS installer is `release/YSR-Desk-Setup-0.1.0.exe`. GitHub Actions (`.github/workflows/windows-installer.yml`) runs the tests and uploads that installer as `ysr-desk-windows-installer`. It is unsigned, so SmartScreen will warn until the file is code-signed.
+The NSIS installer is `release/YourSpotRented-Setup-0.1.0.exe`. GitHub Actions (`.github/workflows/windows-installer.yml`) runs the tests and uploads that installer as `ysr-desk-windows-installer`. It is unsigned, so SmartScreen will warn until the file is code-signed.
 
 Closing the window hides it to the tray. Quit from the tray icon.
 
