@@ -1,9 +1,10 @@
-import { BrowserWindow, Notification } from "electron";
+import { BrowserWindow, Notification, clipboard, shell } from "electron";
 import { ALERT_TICK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS } from "../shared/constants";
 import type { ActionResult, AppSnapshot, SettingsPatch, SmsMessage } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
 import { attentionNotice } from "../core/rentalIds";
 import { toE164 } from "../core/format";
+import { RINGCENTRAL_WEB_SMS, assertAllowedExternalUrl, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { isStopKeyword } from "../core/safety";
 import { DeskSession } from "../core/session";
 import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
@@ -112,6 +113,43 @@ export class DeskEngine {
     this.store.saveResolved(this.session.getResolved());
     this.alertedPhones.delete(toE164(phone));
     return { ok: true, message: "Back in the queue." };
+  }
+
+  /** Opens the RingCentral SMS composer for this number. Never sends or prefills a message. */
+  async openNumber(phone: string): Promise<ActionResult> {
+    if (this.store.openNumbersIn === "web") {
+      const opened = await this.openInWeb(phone);
+      this.announce(opened.message);
+      return opened;
+    }
+    try {
+      const url = ringCentralSmsUrl(phone);
+      assertAllowedExternalUrl(url);
+      await shell.openExternal(url);
+      return { ok: true, message: "Opened in the RingCentral app." };
+    } catch {
+      const fallback = await this.openInWeb(phone);
+      const message = `RingCentral app did not open. ${fallback.message}`;
+      this.announce(message);
+      return { ok: fallback.ok, message };
+    }
+  }
+
+  private async openInWeb(phone: string): Promise<ActionResult> {
+    assertAllowedExternalUrl(RINGCENTRAL_WEB_SMS);
+    clipboard.writeText(toE164(phone));
+    try {
+      await shell.openExternal(RINGCENTRAL_WEB_SMS);
+    } catch {
+      return { ok: false, message: "Could not open RingCentral." };
+    }
+    return { ok: true, message: "Number copied, paste it in RingCentral search" };
+  }
+
+  private announce(message: string): void {
+    this.banner = message;
+    this.toast("YourSpotRented", message);
+    this.broadcast();
   }
 
   async saveSettings(patch: SettingsPatch): Promise<ActionResult> {

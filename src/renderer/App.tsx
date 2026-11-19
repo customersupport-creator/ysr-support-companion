@@ -115,6 +115,9 @@ export function App() {
             onCopy={async (id) => {
               await api.copyText(id);
             }}
+            onOpenNumber={(phone) => {
+              void api.openNumber(phone).then((result) => setNote(result.message));
+            }}
           />
         ) : null}
         {panel === "thread" ? (
@@ -122,6 +125,9 @@ export function App() {
             snap={snap}
             onCopy={async (id) => {
               await api.copyText(id);
+            }}
+            onOpenNumber={(phone) => {
+              void api.openNumber(phone).then((result) => setNote(result.message));
             }}
             onResolve={(threadId) => {
               const phone = snap.thread?.customerPhone;

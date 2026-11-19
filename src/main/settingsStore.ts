@@ -10,6 +10,7 @@ interface FileShape {
   notificationsEnabled: boolean;
   alwaysOnTop: boolean;
   available: boolean;
+  openNumbersIn: "desktop" | "web";
   consentPhones: ConsentWarning[];
   sealed: Record<string, string>;
 }
@@ -33,6 +34,7 @@ function defaults(): FileShape {
     notificationsEnabled: true,
     alwaysOnTop: false,
     available: true,
+    openNumbersIn: "desktop",
     consentPhones: [],
     sealed: {},
   };
@@ -58,6 +60,7 @@ export class SettingsStore {
       consentPhones: Array.isArray(saved.consentPhones) ? saved.consentPhones : [],
       sealed: saved.sealed && typeof saved.sealed === "object" ? saved.sealed : {},
     };
+    this.file.openNumbersIn = this.file.openNumbersIn === "web" ? "web" : "desktop";
     this.memorySecrets = emptySecrets();
     for (const key of SECRET_KEYS) this.memorySecrets[key] = unseal(this.file.sealed[key] ?? "");
     this.memorySecrets.rcAccessExpiresAt = Number(unseal(this.file.sealed.rcAccessExpiresAt ?? "") || "0");
@@ -69,6 +72,10 @@ export class SettingsStore {
 
   get available(): boolean {
     return this.file.available;
+  }
+
+  get openNumbersIn(): "desktop" | "web" {
+    return this.file.openNumbersIn === "web" ? "web" : "desktop";
   }
 
   set available(value: boolean) {
@@ -120,6 +127,7 @@ export class SettingsStore {
       notificationsEnabled: this.file.notificationsEnabled,
       alwaysOnTop: this.file.alwaysOnTop,
       available: this.file.available,
+      openNumbersIn: this.file.openNumbersIn === "web" ? "web" : "desktop",
       consentPhones: this.file.consentPhones,
       secureStorage: this.secureStorageAvailable(),
     };
@@ -131,6 +139,7 @@ export class SettingsStore {
     if (patch.rcClientId != null) this.file.rcClientId = patch.rcClientId.trim();
     if (patch.notificationsEnabled != null) this.file.notificationsEnabled = patch.notificationsEnabled;
     if (patch.alwaysOnTop != null) this.file.alwaysOnTop = patch.alwaysOnTop;
+    if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web") this.file.openNumbersIn = patch.openNumbersIn;
     if (patch.consentPhones) this.file.consentPhones = patch.consentPhones.filter((item) => item.phone.trim());
     const secretError = this.applySecrets(patch);
     this.persist();

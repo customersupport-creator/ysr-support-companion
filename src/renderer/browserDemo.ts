@@ -1,6 +1,8 @@
 import { SUPPORT_LINE_DISPLAY } from "../shared/constants";
 import type { AppSnapshot, PublicSettings, ActionResult, SettingsPatch, YsrApi } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
+import { toE164 } from "../core/format";
+import { RINGCENTRAL_WEB_SMS, ringCentralSmsUrl } from "../core/ringcentralLink";
 import { DeskSession } from "../core/session";
 import { DEMO_CONSENT, DEMO_FACILITIES, buildDemoMessages, simulatedInbound } from "../demo/fixtures";
 import { PLAYBOOK_SOPS } from "../demo/playbookSops";
@@ -17,6 +19,7 @@ export function createBrowserDemo(): YsrApi {
   let available = true;
   let alwaysOnTop = false;
   let notificationsEnabled = true;
+  let openNumbersIn: "desktop" | "web" = "desktop";
   let banner: string | null = "Demo mode. This desk does not send texts.";
   const alerted = new Set<string>();
   const listeners = new Set<(snapshot: AppSnapshot) => void>();
@@ -32,6 +35,7 @@ export function createBrowserDemo(): YsrApi {
     notificationsEnabled,
     alwaysOnTop,
     available,
+    openNumbersIn,
     consentPhones: DEMO_CONSENT,
     secureStorage: false,
   });
@@ -113,6 +117,23 @@ export function createBrowserDemo(): YsrApi {
       emit();
       return { ok: true, message: banner };
     },
+    openNumber: async (phone) => {
+      if (openNumbersIn === "web") {
+        try {
+          await navigator.clipboard.writeText(toE164(phone));
+        } catch {
+          /* clipboard may be blocked in the browser demo */
+        }
+        window.open(RINGCENTRAL_WEB_SMS, "_blank", "noopener");
+        banner = "Number copied, paste it in RingCentral search";
+        emit();
+        return { ok: true, message: banner };
+      }
+      const url = ringCentralSmsUrl(phone);
+      banner = `Demo would open ${url}`;
+      emit();
+      return { ok: true, message: banner };
+    },
     copyText: async (text) => {
       try {
         await navigator.clipboard.writeText(text);
@@ -124,6 +145,7 @@ export function createBrowserDemo(): YsrApi {
     saveSettings: async (patch: SettingsPatch) => {
       if (patch.alwaysOnTop != null) alwaysOnTop = patch.alwaysOnTop;
       if (patch.notificationsEnabled != null) notificationsEnabled = patch.notificationsEnabled;
+      if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web") openNumbersIn = patch.openNumbersIn;
       banner = "Browser demo keeps settings in this tab only.";
       emit();
       return { ok: true, message: banner };

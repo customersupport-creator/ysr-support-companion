@@ -15,6 +15,7 @@ const api: YsrApi = {
   resolveThread: (threadId) => ipcRenderer.invoke("ysr:resolve", threadId) as Promise<ActionResult>,
   unresolvePhone: (phone) => ipcRenderer.invoke("ysr:unresolve", phone) as Promise<ActionResult>,
   copyText: (text) => ipcRenderer.invoke("ysr:copy-text", text) as Promise<ActionResult>,
+  openNumber: (phone) => ipcRenderer.invoke("ysr:open-number", phone) as Promise<ActionResult>,
   saveSettings: (patch: SettingsPatch) => ipcRenderer.invoke("ysr:save-settings", patch) as Promise<ActionResult>,
   testRingCentral: () => ipcRenderer.invoke("ysr:test-ringcentral") as Promise<ActionResult>,
   testAirtable: () => ipcRenderer.invoke("ysr:test-airtable") as Promise<ActionResult>,

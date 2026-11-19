@@ -7,10 +7,12 @@ export function ThreadPanel({
   snap,
   onResolve,
   onCopy,
+  onOpenNumber,
 }: {
   snap: AppSnapshot;
   onResolve: (threadId: string) => void;
   onCopy: (id: string) => Promise<void> | void;
+  onOpenNumber: (phone: string) => void;
 }) {
   const thread = snap.thread;
   if (!thread) {
@@ -24,7 +26,11 @@ export function ThreadPanel({
   return (
     <section className="panel thread">
       <header className="thread-head">
-        <h2>{thread.displayPhone}</h2>
+        <h2>
+          <button type="button" className="phone-link" onClick={() => onOpenNumber(thread.customerPhone)}>
+            {thread.displayPhone}
+          </button>
+        </h2>
         {thread.card ? (
           <p>
             <b className={`urgency inline ${thread.card.urgency.toLowerCase()}`}>{thread.card.urgency}</b>
@@ -37,6 +43,9 @@ export function ThreadPanel({
       </header>
       <div className="card-foot">
         <RentalChips ids={thread.rentalIds} onCopy={onCopy} />
+        <button type="button" className="open-rc" onClick={() => onOpenNumber(thread.customerPhone)}>
+          Open in RingCentral
+        </button>
         {thread.card ? (
           <button type="button" className="resolve" onClick={() => onResolve(thread.id)}>
             Resolve

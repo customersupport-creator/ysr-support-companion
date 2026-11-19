@@ -36,6 +36,19 @@ export function SettingsPanel({
         />
         Windows toast once a number has been waiting 5 minutes
       </label>
+      <label>
+        Open numbers in
+        <select
+          value={settings.openNumbersIn}
+          onChange={(event) => void save({ openNumbersIn: event.target.value as "desktop" | "web" })}
+        >
+          <option value="desktop">RingCentral desktop app</option>
+          <option value="web">RingCentral web</option>
+        </select>
+      </label>
+      <p className="meta">
+        The desktop app opens the SMS composer for that number. RingCentral has no link to an existing thread. Web copies the number and opens RingCentral in the browser.
+      </p>
       <label className="check">
         <input
           type="checkbox"

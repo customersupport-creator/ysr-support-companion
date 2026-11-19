@@ -148,6 +148,7 @@ export interface PublicSettings {
   notificationsEnabled: boolean;
   alwaysOnTop: boolean;
   available: boolean;
+  openNumbersIn: "desktop" | "web";
   consentPhones: ConsentWarning[];
   secureStorage: boolean;
 }
@@ -184,6 +185,7 @@ export interface SettingsPatch {
   clearAirtableToken?: boolean;
   notificationsEnabled?: boolean;
   alwaysOnTop?: boolean;
+  openNumbersIn?: "desktop" | "web";
   consentPhones?: ConsentWarning[];
 }
 
@@ -201,6 +203,7 @@ export interface YsrApi {
   resolveThread(threadId: string): Promise<ActionResult>;
   unresolvePhone(phone: string): Promise<ActionResult>;
   copyText(text: string): Promise<ActionResult>;
+  openNumber(phone: string): Promise<ActionResult>;
   saveSettings(patch: SettingsPatch): Promise<ActionResult>;
   testRingCentral(): Promise<ActionResult>;
   testAirtable(): Promise<ActionResult>;

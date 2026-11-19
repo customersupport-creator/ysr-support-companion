@@ -68,6 +68,10 @@ app.whenReady().then(async () => {
     if (typeof phone !== "string") return { ok: false, message: "Could not restore that number." };
     return engine.unresolvePhone(phone);
   });
+  ipcMain.handle("ysr:open-number", (_event, phone: string) => {
+    if (typeof phone !== "string") return { ok: false, message: "Could not open that number." };
+    return engine.openNumber(phone);
+  });
   ipcMain.handle("ysr:copy-text", (_event, text: string) => {
     if (typeof text !== "string" || text.length > 32) return { ok: false, message: "Could not copy that." };
     clipboard.writeText(text);

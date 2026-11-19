@@ -11,6 +11,7 @@ export function QueuePanel({
   onResolve,
   onUnresolve,
   onCopy,
+  onOpenNumber,
 }: {
   snap: AppSnapshot;
   onOpen: (threadId: string) => void;
@@ -18,6 +19,7 @@ export function QueuePanel({
   onResolve: (threadId: string) => void;
   onUnresolve: (phone: string) => void;
   onCopy: (id: string) => Promise<void> | void;
+  onOpenNumber: (phone: string) => void;
 }) {
   const now = useNow();
   return (
@@ -35,7 +37,7 @@ export function QueuePanel({
       <ul className="cards">
         {snap.queue.map((card) => (
           <li key={card.key}>
-            <Card card={card} now={now} onOpen={onOpen} onResolve={onResolve} onCopy={onCopy} />
+            <Card card={card} now={now} onOpen={onOpen} onResolve={onResolve} onCopy={onCopy} onOpenNumber={onOpenNumber} />
           </li>
         ))}
       </ul>
@@ -66,17 +68,26 @@ function Card({
   onOpen,
   onResolve,
   onCopy,
+  onOpenNumber,
 }: {
   card: QueueCard;
   now: number;
   onOpen: (id: string) => void;
   onResolve: (id: string) => void;
   onCopy: (id: string) => Promise<void> | void;
+  onOpenNumber: (phone: string) => void;
 }) {
   const wait = formatWait(now - Date.parse(card.waitingSince));
   const ready = shouldAlertForWait(now - Date.parse(card.waitingSince));
   return (
     <article className={`card ${card.urgency.toLowerCase()}`}>
+      <p className="headline">
+        Hey, number{" "}
+        <button type="button" className="phone-link" onClick={() => onOpenNumber(card.customerPhone)}>
+          {card.displayPhone}
+        </button>{" "}
+        needs your attention
+      </p>
       <button type="button" className="card-open" onClick={() => onOpen(card.threadId)}>
         <span className="card-top">
           <b className="urgency">{card.urgency}</b>
@@ -84,15 +95,19 @@ function Card({
           {ready ? <b className="badge alert">5 min</b> : null}
           <time>{wait}</time>
         </span>
-        <strong>{card.headline}</strong>
         <q>{card.preview}</q>
         <span className="reasons">{card.reasons.join(" · ")}</span>
       </button>
       <div className="card-foot">
         <RentalChips ids={card.rentalIds} onCopy={onCopy} />
-        <button type="button" className="resolve" onClick={() => onResolve(card.threadId)}>
-          Resolve
-        </button>
+        <span className="card-actions">
+          <button type="button" className="open-rc" onClick={() => onOpenNumber(card.customerPhone)}>
+            Open in RingCentral
+          </button>
+          <button type="button" className="resolve" onClick={() => onResolve(card.threadId)}>
+            Resolve
+          </button>
+        </span>
       </div>
     </article>
   );

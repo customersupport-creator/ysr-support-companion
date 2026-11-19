@@ -20,6 +20,7 @@ npm run dev
 - A number waiting under 5 minutes stays on the queue and does not toast. At 5 minutes, Available agents get one alert for that number. A later text from the same number does not raise a second alert until the first one has been answered.
 - Each card shows rental IDs found in the thread (usually a 9-digit SpotHero id such as 138424128), with a copy button. The 5-minute toast includes the newest id when one is known.
 - Resolve removes that number from the queue on this computer only. It does not text the customer or change RingCentral. If they text again, the number comes back. Undo is available for a few seconds, and Resolved today lists what you hid today.
+- The phone number and **Open in RingCentral** open the RingCentral desktop SMS composer for that number (`rcapp://r/sms?type=new&number=...`). Nothing is prefilled. Settings can switch this to the RingCentral website, which copies the number so you can paste it into search. If the desktop app is not installed, the desk falls back to the website.
 - Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text.
 
 ## Build the Windows installer

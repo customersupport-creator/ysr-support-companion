@@ -170,6 +170,7 @@ h2, h3 { font-size: 16px; margin: 0; color: var(--ysr-text); font-weight: 700; }
   background: var(--ysr-white);
   color: var(--ysr-text);
 }
+.headline { margin: 0; font-weight: 700; color: var(--ysr-text); }
 .card-open {
   border: 0;
   background: transparent;
@@ -206,6 +207,26 @@ h2, h3 { font-size: 16px; margin: 0; color: var(--ysr-text); font-weight: 700; }
 }
 .chip-copy:hover, .resolve:hover { background: var(--ysr-teal-80); color: var(--ysr-white); }
 .no-id { color: var(--ysr-muted); font-size: 13px; }
+.phone-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ysr-teal);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.phone-link:hover { color: var(--ysr-teal-80); }
+.card-actions { display: flex; gap: 6px; margin-left: auto; }
+.open-rc {
+  background: var(--ysr-white);
+  color: var(--ysr-teal);
+  border-color: var(--ysr-teal);
+  border-radius: 99px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.open-rc:hover { background: var(--ysr-teal-10); color: var(--ysr-teal); }
 .resolved-row { justify-content: space-between; }
 .snack {
   position: sticky;
