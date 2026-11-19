@@ -1,0 +1,277 @@
+import { useState } from "react";
+import type { AppSnapshot, SettingsPatch, YsrApi } from "../../shared/types";
+
+export function SettingsPanel({
+  api,
+  snap,
+  onNote,
+}: {
+  api: YsrApi;
+  snap: AppSnapshot;
+  onNote: (note: string) => void;
+}) {
+  const settings = snap.settings;
+  const [clientId, setClientId] = useState(settings.rcClientId);
+  const [secret, setSecret] = useState("");
+  const [jwt, setJwt] = useState("");
+  const [airtable, setAirtable] = useState("");
+  const [server, setServer] = useState(settings.rcServer);
+  const [beeLink, setBeeLink] = useState(settings.beeTextingTemplate);
+  const [gmailId, setGmailId] = useState(settings.gmailClientId);
+  const [gmailSecret, setGmailSecret] = useState("");
+  const [consentText, setConsentText] = useState(
+    settings.consentPhones.map((item) => `${item.phone} | ${item.reason}`).join("\n"),
+  );
+
+  const save = async (patch: SettingsPatch) => {
+    const result = await api.saveSettings(patch);
+    onNote(result.message);
+  };
+
+  return (
+    <section className="panel settings">
+      <h2>ClickSend mail</h2>
+      <p className="meta">
+        Read-only Gmail. The desk looks for ClickSend reply mail and Google Voice copies. It never sends email or texts. Scope: gmail.readonly. Redirect: http://127.0.0.1:47822/callback
+      </p>
+      <label>
+        Gmail client ID
+        <input value={gmailId} onChange={(event) => setGmailId(event.target.value)} />
+      </label>
+      <label>
+        Gmail client secret
+        <input type="password" value={gmailSecret} onChange={(event) => setGmailSecret(event.target.value)} placeholder={settings.hasGmailSecret ? "Saved" : ""} />
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          void save({ gmailClientId: gmailId, gmailClientSecret: gmailSecret || undefined }).then(() => {
+            void api.startGmailOAuth().then((result) => onNote(result.message));
+          });
+        }}
+      >
+        Connect Gmail
+      </button>
+      {settings.gmailConnected ? (
+        <button type="button" onClick={() => void api.disconnectGmail().then((result) => onNote(result.message))}>
+          Disconnect Gmail
+        </button>
+      ) : null}
+      <h2>Desk</h2>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.notificationsEnabled}
+          onChange={(event) => void save({ notificationsEnabled: event.target.checked })}
+        />
+        Windows toast once a number has been waiting 5 minutes
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.autoResolveOnReply}
+          onChange={(event) => void save({ autoResolveOnReply: event.target.checked })}
+        />
+        Auto-resolve when someone replies
+      </label>
+      <label>
+        Follow-up reminder after (minutes)
+        <input
+          type="number"
+          min={1}
+          value={settings.followUpMinutes}
+          onChange={(event) => void save({ followUpMinutes: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Endorse / processing reminder after (minutes)
+        <input
+          type="number"
+          min={1}
+          value={settings.endorseFollowUpMinutes}
+          onChange={(event) => void save({ endorseFollowUpMinutes: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Facility alert after this many customers
+        <input
+          type="number"
+          min={1}
+          value={settings.facilityAlertCustomers}
+          onChange={(event) => void save({ facilityAlertCustomers: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Facility alert window (hours)
+        <input
+          type="number"
+          min={1}
+          value={settings.facilityAlertHours}
+          onChange={(event) => void save({ facilityAlertHours: Number(event.target.value) })}
+        />
+      </label>
+      <label>
+        Open numbers in
+        <select
+          value={settings.openNumbersIn}
+          onChange={(event) => void save({ openNumbersIn: event.target.value as "beetexting" | "desktop" | "web" })}
+        >
+          <option value="beetexting">BeeTexting</option>
+          <option value="desktop">RingCentral desktop app</option>
+          <option value="web">RingCentral web</option>
+        </select>
+      </label>
+      <label>
+        BeeTexting conversation link (optional)
+        <input
+          value={beeLink}
+          onChange={(event) => setBeeLink(event.target.value)}
+          onBlur={() => void save({ beeTextingTemplate: beeLink })}
+          placeholder="https://app.beetexting.com/"
+        />
+      </label>
+      <p className="meta">
+        BeeTexting is the default. The number is copied as +1XXXXXXXXXX and https://app.beetexting.com/ opens. A template may use {"{number}"}, {"{number_e164}"}, or {"{number_digits}"} and must stay on https://app.beetexting.com/. RingCentral desktop opens the SMS composer with no prefilled text. Web copies the number for RingCentral search.
+      </p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.urgentSound}
+          onChange={(event) => void save({ urgentSound: event.target.checked })}
+        />
+        Play a sound for new urgent threads when Available
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.showAccessCodes}
+          onChange={(event) => void save({ showAccessCodes: event.target.checked })}
+        />
+        Always show garage codes
+      </label>
+      <label>
+        Transient high value when past bookings are more than
+        <input
+          type="number"
+          min={0}
+          value={settings.transientHighValueOver}
+          onChange={(event) => void save({ transientHighValueOver: Number(event.target.value) })}
+        />
+      </label>
+      <p className="meta">
+        Active monthly and lease customers are high value. Everyone else is high value only when deduped bookings are greater than this number. 15 stays Regular. 16 is High value.
+      </p>
+      <label>
+        MONTHLY table
+        <input
+          value={settings.historyMonthlyTable}
+          onChange={(event) => void save({ historyMonthlyTable: event.target.value })}
+        />
+      </label>
+      <label>
+        Internal lease table
+        <input value={settings.historyLeaseTable} onChange={(event) => void save({ historyLeaseTable: event.target.value })} />
+      </label>
+      <label>
+        TRANSIENT table
+        <input
+          value={settings.historyTransientTable}
+          onChange={(event) => void save({ historyTransientTable: event.target.value })}
+        />
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.demoMode}
+          onChange={(event) => void save({ demoMode: event.target.checked })}
+        />
+        Demo mode (sample threads, no network)
+      </label>
+      <p className="meta">{snap.connection.ringcentralDetail}</p>
+
+      <h2>RingCentral</h2>
+      <p className="meta">Read only. This app does not send SMS.</p>
+      <label>
+        Server
+        <select value={server} onChange={(event) => setServer(event.target.value as "production" | "sandbox")}>
+          <option value="production">Production</option>
+          <option value="sandbox">Sandbox</option>
+        </select>
+      </label>
+      <label>
+        Client ID
+        <input value={clientId} onChange={(event) => setClientId(event.target.value)} autoComplete="off" />
+      </label>
+      <label>
+        Client secret {settings.hasRcSecret ? "(saved)" : ""}
+        <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} autoComplete="off" />
+      </label>
+      <label>
+        JWT {settings.hasRcJwt ? "(saved)" : ""}
+        <input type="password" value={jwt} onChange={(event) => setJwt(event.target.value)} autoComplete="off" />
+      </label>
+      <div className="command-row">
+        <button
+          type="button"
+          onClick={() =>
+            void save({
+              rcServer: server,
+              rcClientId: clientId,
+              ...(secret ? { rcClientSecret: secret } : {}),
+              ...(jwt ? { rcJwt: jwt } : {}),
+            })
+          }
+        >
+          Save RingCentral
+        </button>
+        <button type="button" onClick={() => void api.testRingCentral().then((result) => onNote(result.message))}>
+          Test
+        </button>
+        <button type="button" onClick={() => void api.startOAuth().then((result) => onNote(result.message))}>
+          OAuth login
+        </button>
+        <button type="button" onClick={() => void api.disconnectRingCentral().then((result) => onNote(result.message))}>
+          Sign out
+        </button>
+      </div>
+      <p className="meta">Support line stays +1 312-999-5161. Secrets are sealed with Windows secure storage.</p>
+
+      <h2>Airtable</h2>
+      <p className="meta">{snap.connection.airtableDetail}</p>
+      <label>
+        Personal access token {settings.airtableTokenSet ? "(saved)" : ""}
+        <input type="password" value={airtable} onChange={(event) => setAirtable(event.target.value)} autoComplete="off" />
+      </label>
+      <div className="command-row">
+        <button type="button" onClick={() => void save(airtable ? { airtableToken: airtable } : {})}>
+          Save token
+        </button>
+        <button type="button" onClick={() => void api.testAirtable().then((result) => onNote(result.message))}>
+          Test read
+        </button>
+      </div>
+      <p className="meta">Reads BEETEXTING_SOPS, the message log, and FACILITY INFORMATION. It does not write to those tables.</p>
+
+      <h2>Consent warnings</h2>
+      <p className="meta">One per line: phone, then a vertical bar, then the reason. These contacts are flagged. The desk does not text anyone.</p>
+      <textarea value={consentText} onChange={(event) => setConsentText(event.target.value)} rows={4} />
+      <button
+        type="button"
+        onClick={() =>
+          void save({
+            consentPhones: consentText
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const [phone, ...rest] = line.split("|");
+                return { phone: phone.trim(), reason: rest.join("|").trim() || "Consent warning" };
+              }),
+          })
+        }
+      >
+        Save consent list
+      </button>
+    </section>
+  );
+}

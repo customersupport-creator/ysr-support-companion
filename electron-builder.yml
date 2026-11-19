@@ -1,0 +1,29 @@
+appId: com.yourspotrented.desk
+productName: YourSpotRented
+copyright: Copyright © Yourspotrented.com
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: resources
+    to: .
+asar: true
+publish: null
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: YourSpotRented
+  artifactName: YourSpotRented-Setup-${version}.${ext}
