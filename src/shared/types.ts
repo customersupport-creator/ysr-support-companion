@@ -39,9 +39,17 @@ export interface QueueCard {
   urgency: Urgency;
   urgent: boolean;
   reasons: string[];
+  rentalIds: string[];
   lastCustomerMessageId: string;
   /** thread id + message id, so a new customer text is a new queue item */
   key: string;
+}
+
+/** Local only. A newer inbound message than lastCustomerMessageId puts the number back. */
+export interface ResolvedRecord {
+  phone: string;
+  lastCustomerMessageId: string;
+  resolvedAt: string;
 }
 
 export interface FlaggedCard {
@@ -123,6 +131,7 @@ export interface ThreadView {
   }>;
   consent: ConsentWarning | null;
   card: QueueCard | null;
+  rentalIds: string[];
   reservation: ReservationInfo | null;
   facility: FacilityRecord | null;
   matchedSops: MatchedSop[];
@@ -159,6 +168,7 @@ export interface AppSnapshot {
   flagged: FlaggedCard[];
   selectedThreadId: string | null;
   thread: ThreadView | null;
+  resolvedToday: ResolvedRecord[];
   banner: string | null;
 }
 
@@ -188,6 +198,9 @@ export interface YsrApi {
   setAvailable(value: boolean): Promise<void>;
   setAlwaysOnTop(value: boolean): Promise<void>;
   selectThread(threadId: string | null): Promise<void>;
+  resolveThread(threadId: string): Promise<ActionResult>;
+  unresolvePhone(phone: string): Promise<ActionResult>;
+  copyText(text: string): Promise<ActionResult>;
   saveSettings(patch: SettingsPatch): Promise<ActionResult>;
   testRingCentral(): Promise<ActionResult>;
   testAirtable(): Promise<ActionResult>;

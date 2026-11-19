@@ -2,6 +2,7 @@ import { BrowserWindow, Notification } from "electron";
 import { ALERT_TICK_MS, PANEL_IDS, RC_SERVERS, RECONCILE_INTERVAL_MS, SOP_REFRESH_INTERVAL_MS } from "../shared/constants";
 import type { ActionResult, AppSnapshot, SettingsPatch, SmsMessage } from "../shared/types";
 import { shouldAlertForWait } from "../core/alerts";
+import { attentionNotice } from "../core/rentalIds";
 import { toE164 } from "../core/format";
 import { isStopKeyword } from "../core/safety";
 import { DeskSession } from "../core/session";
@@ -45,6 +46,7 @@ export class DeskEngine {
       this.noteQueue();
       this.broadcast();
     });
+    this.session.setResolved(this.store.loadResolved());
   }
 
   attachWindow(win: BrowserWindow): void {
@@ -82,6 +84,7 @@ export class DeskEngine {
       flagged: this.session.flagged(),
       selectedThreadId: this.session.selectedId,
       thread: this.session.threadView(),
+      resolvedToday: this.session.resolvedToday(),
       banner: this.banner,
     };
   }
@@ -94,6 +97,21 @@ export class DeskEngine {
 
   async selectThread(threadId: string | null): Promise<void> {
     this.session.select(threadId);
+  }
+
+  async resolveThread(threadId: string): Promise<ActionResult> {
+    const record = this.session.resolve(threadId);
+    if (!record) return { ok: false, message: "That number is not waiting on a reply." };
+    this.store.saveResolved(this.session.getResolved());
+    this.alertedPhones.delete(record.phone);
+    return { ok: true, message: `Resolved ${record.phone}` };
+  }
+
+  async unresolvePhone(phone: string): Promise<ActionResult> {
+    this.session.unresolve(phone);
+    this.store.saveResolved(this.session.getResolved());
+    this.alertedPhones.delete(toE164(phone));
+    return { ok: true, message: "Back in the queue." };
   }
 
   async saveSettings(patch: SettingsPatch): Promise<ActionResult> {
@@ -354,7 +372,7 @@ export class DeskEngine {
       for (const card of queue) {
         if (!shouldAlertForWait(card.waitMs) || this.alertedPhones.has(card.customerPhone)) continue;
         this.alertedPhones.add(card.customerPhone);
-        this.toast(card.headline, card.preview);
+        this.toast(attentionNotice(card.customerPhone, card.rentalIds), card.preview);
       }
       for (const flag of this.session.flagged()) {
         if (this.seenFlags.has(flag.threadId)) continue;

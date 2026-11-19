@@ -1,6 +1,8 @@
-import type { QueueCard, SmsMessage, Thread } from "../shared/types";
+import type { QueueCard, ResolvedRecord, SmsMessage, Thread } from "../shared/types";
 import { attentionHeadline, formatPhoneDisplay, truncate } from "./format";
 import { isReactionMessage } from "./reactions";
+import { extractRentalIds } from "./rentalIds";
+import { isResolvedForMessage } from "./resolved";
 import { classifyUrgency } from "./urgency";
 
 export interface ReplyAssessment {
@@ -44,12 +46,13 @@ export function assessNeedsReply(messages: SmsMessage[], nowMs: number): ReplyAs
 
 const URGENCY_RANK: Record<QueueCard["urgency"], number> = { RED: 0, YELLOW: 1, GREEN: 2 };
 
-export function queueFromThreads(threads: Thread[], nowMs: number): QueueCard[] {
+export function queueFromThreads(threads: Thread[], nowMs: number, resolved: ResolvedRecord[] = []): QueueCard[] {
   const cards: QueueCard[] = [];
   for (const thread of threads) {
     if (thread.consentWarning) continue;
     const assessment = assessNeedsReply(thread.messages, nowMs);
     if (!assessment) continue;
+    if (isResolvedForMessage(resolved, thread.customerPhone, assessment.message.id)) continue;
     const urgency = classifyUrgency(thread.messages);
     cards.push({
       threadId: thread.id,
@@ -62,6 +65,7 @@ export function queueFromThreads(threads: Thread[], nowMs: number): QueueCard[] 
       urgency: urgency.urgency,
       urgent: urgency.urgent,
       reasons: urgency.reasons,
+      rentalIds: extractRentalIds(thread.messages, thread.customerPhone),
       lastCustomerMessageId: assessment.message.id,
       key: `${thread.id}:${assessment.message.id}`,
     });

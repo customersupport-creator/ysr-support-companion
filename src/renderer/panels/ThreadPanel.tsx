@@ -1,8 +1,17 @@
 import type { AppSnapshot } from "../../shared/types";
 import { extractFacilityFacts } from "../../core/facilityFacts";
 import { formatWait } from "../../core/format";
+import { RentalChips } from "../components/RentalChips";
 
-export function ThreadPanel({ snap }: { snap: AppSnapshot }) {
+export function ThreadPanel({
+  snap,
+  onResolve,
+  onCopy,
+}: {
+  snap: AppSnapshot;
+  onResolve: (threadId: string) => void;
+  onCopy: (id: string) => Promise<void> | void;
+}) {
   const thread = snap.thread;
   if (!thread) {
     return (
@@ -26,6 +35,14 @@ export function ThreadPanel({ snap }: { snap: AppSnapshot }) {
           <p className="meta">No unanswered customer text.</p>
         )}
       </header>
+      <div className="card-foot">
+        <RentalChips ids={thread.rentalIds} onCopy={onCopy} />
+        {thread.card ? (
+          <button type="button" className="resolve" onClick={() => onResolve(thread.id)}>
+            Resolve
+          </button>
+        ) : null}
+      </div>
       {thread.consent ? (
         <div className="callout danger">
           <strong>Consent warning. Do not text.</strong>

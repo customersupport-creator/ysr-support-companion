@@ -40,7 +40,9 @@ describe("demo queue", () => {
     const view = session.threadView();
     expect(view?.matchedSops[0]?.sop.number).toBe(2);
     expect(view?.facility?.name).toContain("Raymond");
-    expect(view?.reservation?.rentalId).toBe("SH-88421");
+    expect(view?.rentalIds[0]).toBe("138424128");
+    expect(view?.rentalIds).toContain("136244125");
+    expect(view?.reservation?.rentalId).toBe("136244125");
     expect(JSON.stringify(view)).not.toMatch(/APPROVE|suggestedReplies/);
   });
 

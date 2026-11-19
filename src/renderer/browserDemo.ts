@@ -50,6 +50,7 @@ export function createBrowserDemo(): YsrApi {
     flagged: session.flagged(),
     selectedThreadId: session.selectedId,
     thread: session.threadView(),
+    resolvedToday: session.resolvedToday(),
     banner,
   });
 
@@ -98,6 +99,27 @@ export function createBrowserDemo(): YsrApi {
     },
     selectThread: async (threadId) => {
       session.select(threadId);
+    },
+    resolveThread: async (threadId) => {
+      const record = session.resolve(threadId);
+      if (!record) return { ok: false, message: "That number is not waiting on a reply." };
+      banner = "Resolved on this computer. Nothing was sent.";
+      emit();
+      return { ok: true, message: banner };
+    },
+    unresolvePhone: async (phone) => {
+      session.unresolve(phone);
+      banner = "Back in the queue.";
+      emit();
+      return { ok: true, message: banner };
+    },
+    copyText: async (text) => {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        return { ok: false, message: "Could not copy that." };
+      }
+      return { ok: true, message: "Copied." };
     },
     saveSettings: async (patch: SettingsPatch) => {
       if (patch.alwaysOnTop != null) alwaysOnTop = patch.alwaysOnTop;

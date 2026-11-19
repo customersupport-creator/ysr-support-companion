@@ -18,7 +18,8 @@ npm run dev
 
 - Queue cards show wait time, a preview, and RED / YELLOW / GREEN from the playbook urgency rules.
 - A number waiting under 5 minutes stays on the queue and does not toast. At 5 minutes, Available agents get one alert for that number. A later text from the same number does not raise a second alert until the first one has been answered.
-- Opening a card shows the thread, the reservation details found in it, the facility record, and the matched SOP (steps, lookups, and who to escalate to).
+- Each card shows rental IDs found in the thread (usually a 9-digit SpotHero id such as 138424128), with a copy button. The 5-minute toast includes the newest id when one is known.
+- Resolve removes that number from the queue on this computer only. It does not text the customer or change RingCentral. If they text again, the number comes back. Undo is available for a few seconds, and Resolved today lists what you hid today.
 - Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text.
 
 ## Build the Windows installer

@@ -110,16 +110,22 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
   const answered = DEMO_PHONES.answered;
 
   return [
-    sms("taken-res", taken, "inbound", reservation(now, "17 Raymond St", "SH-88421", "M4PL8", "Sam"), at(40)),
+    sms("taken-res", taken, "inbound", reservation(now, "17 Raymond St", "136244125", "M4PL8", "Sam"), at(40)),
     sms(
       "taken-now",
       taken,
       "inbound",
-      "I'm here at 17 Raymond and someone is in my spot. I can't park. The other plate looks like BXTL902.",
+      "I'm here at 17 Raymond and someone is in my spot. I can't park. reservation 138424128. The other plate looks like BXTL902.",
       at(8),
     ),
-    sms("towed-now", towed, "inbound", "My car was towed from the lot. This is ridiculous. I want a lawyer and my money back.", at(11)),
-    sms("refund-res", refund, "inbound", reservation(now, "500 Wabash Lot", "SH-22019", "QL77", "Priya"), at(50)),
+    sms(
+      "towed-now",
+      towed,
+      "inbound",
+      "My car was towed from the lot. This is ridiculous. Call me at (312) 555-0144. Gate code 4821. I want a lawyer and my money back.",
+      at(11),
+    ),
+    sms("refund-res", refund, "inbound", reservation(now, "500 Wabash Lot", "136244125", "QL77", "Priya"), at(50)),
     sms(
       "refund-now",
       refund,
@@ -137,7 +143,7 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
       at(28),
     ),
     sms("react-tap", reactionDone, "inbound", "Loved “You won't be towed as long as you park in the correct spot.”", at(27)),
-    sms("gate-res", gate, "inbound", reservation(now, "17 Raymond St", "SH-10002", "GATE1", "Jon"), at(25)),
+    sms("gate-res", gate, "inbound", reservation(now, "17 Raymond St", "138420011", "GATE1", "Jon"), at(25)),
     sms("gate-old", gate, "inbound", "The gate code isn't working.", at(20)),
     sms("gate-ask", gate, "outbound", "Which code did you try?", at(18)),
     sms("gate-like", gate, "inbound", "Liked “Which code did you try?”", at(17)),

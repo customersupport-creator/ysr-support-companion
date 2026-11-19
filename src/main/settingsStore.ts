@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { app, safeStorage } from "electron";
-import type { ConsentWarning, PublicSettings, SettingsPatch } from "../shared/types";
+import type { ConsentWarning, PublicSettings, ResolvedRecord, SettingsPatch } from "../shared/types";
 
 interface FileShape {
   demoMode: boolean;
@@ -42,9 +42,12 @@ export class SettingsStore {
   private file: FileShape = defaults();
   private memorySecrets: Secrets = emptySecrets();
   readonly path: string;
+  readonly resolvedPath: string;
 
   constructor() {
-    this.path = path.join(app.getPath("userData"), "settings.json");
+    const dir = app.getPath("userData");
+    this.path = path.join(dir, "settings.json");
+    this.resolvedPath = path.join(dir, "resolved.json");
   }
 
   load(): void {
@@ -144,6 +147,20 @@ export class SettingsStore {
     this.file.sealed.rcRefreshToken = refreshToken ? seal(refreshToken) : "";
     this.file.sealed.rcAccessExpiresAt = seal(String(expiresAt));
     this.persist();
+  }
+
+  loadResolved(): ResolvedRecord[] {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.resolvedPath, "utf8")) as ResolvedRecord[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveResolved(records: ResolvedRecord[]): void {
+    fs.mkdirSync(path.dirname(this.resolvedPath), { recursive: true });
+    fs.writeFileSync(this.resolvedPath, JSON.stringify(records, null, 2), "utf8");
   }
 
   clearTokens(): void {

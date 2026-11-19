@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { app, ipcMain } from "electron";
+import { app, clipboard, ipcMain } from "electron";
 import type { SettingsPatch } from "../shared/types";
 import { DeskEngine, panelIds } from "./engine";
 import { SettingsStore } from "./settingsStore";
@@ -60,6 +60,19 @@ app.whenReady().then(async () => {
     return engine.saveSettings({ alwaysOnTop: on });
   });
   ipcMain.handle("ysr:select-thread", (_event, threadId: string | null) => engine.selectThread(threadId));
+  ipcMain.handle("ysr:resolve", (_event, threadId: string) => {
+    if (typeof threadId !== "string") return { ok: false, message: "Could not resolve that number." };
+    return engine.resolveThread(threadId);
+  });
+  ipcMain.handle("ysr:unresolve", (_event, phone: string) => {
+    if (typeof phone !== "string") return { ok: false, message: "Could not restore that number." };
+    return engine.unresolvePhone(phone);
+  });
+  ipcMain.handle("ysr:copy-text", (_event, text: string) => {
+    if (typeof text !== "string" || text.length > 32) return { ok: false, message: "Could not copy that." };
+    clipboard.writeText(text);
+    return { ok: true, message: "Copied." };
+  });
   ipcMain.handle("ysr:save-settings", (_event, patch: unknown) => {
     if (!patch || typeof patch !== "object") return { ok: false, message: "Settings were not saved." };
     return engine.saveSettings(patch as SettingsPatch);

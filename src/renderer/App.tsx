@@ -17,6 +17,13 @@ export function App() {
   const [snap, setSnap] = useState<AppSnapshot | null>(null);
   const [panel, setPanel] = useState<PanelId>("queue");
   const [note, setNote] = useState("");
+  const [undo, setUndo] = useState<{ phone: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!undo) return undefined;
+    const timer = window.setTimeout(() => setUndo(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [undo]);
 
   useEffect(() => {
     let unsubscribe: () => void = () => undefined;
@@ -94,12 +101,56 @@ export function App() {
             snap={snap}
             onOpen={openThread}
             onSimulate={() => void api.simulateInbound().then((result) => setNote(result.message))}
+            onResolve={(threadId) => {
+              const card = snap.queue.find((item) => item.threadId === threadId);
+              void api.resolveThread(threadId).then((result) => {
+                if (!result.ok || !card) return;
+                setUndo({ phone: card.customerPhone, label: card.displayPhone });
+              });
+            }}
+            onUnresolve={(phone) => {
+              void api.unresolvePhone(phone);
+              setUndo(null);
+            }}
+            onCopy={async (id) => {
+              await api.copyText(id);
+            }}
           />
         ) : null}
-        {panel === "thread" ? <ThreadPanel snap={snap} /> : null}
+        {panel === "thread" ? (
+          <ThreadPanel
+            snap={snap}
+            onCopy={async (id) => {
+              await api.copyText(id);
+            }}
+            onResolve={(threadId) => {
+              const phone = snap.thread?.customerPhone;
+              const label = snap.thread?.displayPhone ?? "This number";
+              void api.resolveThread(threadId).then((result) => {
+                if (!result.ok || !phone) return;
+                setUndo({ phone, label });
+                setPanel("queue");
+              });
+            }}
+          />
+        ) : null}
         {panel === "settings" ? <SettingsPanel api={api} snap={snap} onNote={setNote} /> : null}
       </main>
       {note ? <p className="footnote">{note}</p> : null}
+      {undo ? (
+        <div className="snack" role="status">
+          <span>Resolved {undo.label}. Nothing was sent.</span>
+          <button
+            type="button"
+            onClick={() => {
+              void api.unresolvePhone(undo.phone);
+              setUndo(null);
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

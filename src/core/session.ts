@@ -3,16 +3,19 @@ import type {
   FacilityRecord,
   FlaggedCard,
   QueueCard,
+  ResolvedRecord,
   SmsMessage,
   SopRecord,
   Thread,
   ThreadView,
 } from "../shared/types";
 import { matchFacility } from "./facilityFacts";
-import { formatPhoneDisplay } from "./format";
+import { formatPhoneDisplay, toE164 } from "./format";
 import { flaggedFromThreads, groupThreads, mergeMessages } from "./messages";
-import { queueFromThreads } from "./needsReply";
+import { assessNeedsReply, queueFromThreads } from "./needsReply";
 import { isReactionMessage } from "./reactions";
+import { extractRentalIds } from "./rentalIds";
+import { dropResolved, resolvedOnDay, upsertResolved } from "./resolved";
 import { parseReservation } from "./reservation";
 import { matchSops } from "./sopMatch";
 
@@ -32,6 +35,7 @@ export class DeskSession {
   private sops: SopRecord[];
   private facilities: FacilityRecord[];
   private consent: ConsentWarning[];
+  private resolved: ResolvedRecord[] = [];
   private readonly now: () => Date;
 
   constructor(options: SessionOptions = {}) {
@@ -80,7 +84,7 @@ export class DeskSession {
   }
 
   queue(): QueueCard[] {
-    return queueFromThreads(this.threads, this.now().getTime());
+    return queueFromThreads(this.threads, this.now().getTime(), this.resolved);
   }
 
   flagged(): FlaggedCard[] {
@@ -90,6 +94,45 @@ export class DeskSession {
   select(threadId: string | null): void {
     this.selectedThreadId = threadId;
     this.emit();
+  }
+
+  setResolved(records: ResolvedRecord[]): void {
+    this.resolved = records.map((record) => ({ ...record, phone: toE164(record.phone) }));
+    this.emit();
+  }
+
+  getResolved(): ResolvedRecord[] {
+    return this.resolved.map((record) => ({ ...record }));
+  }
+
+  /** Hide this number until a newer customer message arrives. Does not send anything. */
+  resolve(threadId: string): ResolvedRecord | null {
+    const thread = this.threads.find((item) => item.id === threadId);
+    if (!thread) return null;
+    const assessment = assessNeedsReply(thread.messages, this.now().getTime());
+    if (!assessment) return null;
+    const record: ResolvedRecord = {
+      phone: thread.customerPhone,
+      lastCustomerMessageId: assessment.message.id,
+      resolvedAt: this.now().toISOString(),
+    };
+    this.resolved = upsertResolved(this.resolved, record);
+    this.emit();
+    return record;
+  }
+
+  unresolve(phone: string): void {
+    this.resolved = dropResolved(this.resolved, phone);
+    this.emit();
+  }
+
+  resolvedToday(): ResolvedRecord[] {
+    return resolvedOnDay(this.resolved, this.now()).filter((record) => {
+      const thread = this.threads.find((item) => toE164(item.customerPhone) === toE164(record.phone));
+      if (!thread) return false;
+      const assessment = assessNeedsReply(thread.messages, this.now().getTime());
+      return assessment?.message.id === record.lastCustomerMessageId;
+    });
   }
 
   threadView(threadId: string | null = this.selectedThreadId): ThreadView | null {
@@ -111,6 +154,7 @@ export class DeskSession {
       })),
       consent: thread.consentWarning,
       card: this.queue().find((item) => item.threadId === threadId) ?? null,
+      rentalIds: extractRentalIds(thread.messages, thread.customerPhone),
       reservation,
       facility,
       matchedSops: matchSops(thread.messages, this.sops),
