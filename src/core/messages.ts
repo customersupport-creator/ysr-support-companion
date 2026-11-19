@@ -16,7 +16,8 @@ export function mergeMessages(existing: SmsMessage[], incoming: SmsMessage[]): S
       if (current.threadId !== message.threadId || current.direction !== message.direction) return false;
       if (current.body !== message.body) return false;
       const delta = Math.abs(Date.parse(current.sentAt) - sentAt);
-      return Number.isFinite(delta) && delta < 5000;
+      const windowMs = message.source === "clicksend" && current.source === "clicksend" ? 5 * 60_000 : 5000;
+      return Number.isFinite(delta) && delta < windowMs;
     });
     if (!duplicate) byId.set(message.id, message);
   }

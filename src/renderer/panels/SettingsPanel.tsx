@@ -17,6 +17,8 @@ export function SettingsPanel({
   const [airtable, setAirtable] = useState("");
   const [server, setServer] = useState(settings.rcServer);
   const [beeLink, setBeeLink] = useState(settings.beeTextingTemplate);
+  const [gmailId, setGmailId] = useState(settings.gmailClientId);
+  const [gmailSecret, setGmailSecret] = useState("");
   const [consentText, setConsentText] = useState(
     settings.consentPhones.map((item) => `${item.phone} | ${item.reason}`).join("\n"),
   );
@@ -28,6 +30,33 @@ export function SettingsPanel({
 
   return (
     <section className="panel settings">
+      <h2>ClickSend mail</h2>
+      <p className="meta">
+        Read-only Gmail. The desk looks for ClickSend reply mail and Google Voice copies. It never sends email or texts. Scope: gmail.readonly. Redirect: http://127.0.0.1:47822/callback
+      </p>
+      <label>
+        Gmail client ID
+        <input value={gmailId} onChange={(event) => setGmailId(event.target.value)} />
+      </label>
+      <label>
+        Gmail client secret
+        <input type="password" value={gmailSecret} onChange={(event) => setGmailSecret(event.target.value)} placeholder={settings.hasGmailSecret ? "Saved" : ""} />
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          void save({ gmailClientId: gmailId, gmailClientSecret: gmailSecret || undefined }).then(() => {
+            void api.startGmailOAuth().then((result) => onNote(result.message));
+          });
+        }}
+      >
+        Connect Gmail
+      </button>
+      {settings.gmailConnected ? (
+        <button type="button" onClick={() => void api.disconnectGmail().then((result) => onNote(result.message))}>
+          Disconnect Gmail
+        </button>
+      ) : null}
       <h2>Desk</h2>
       <label className="check">
         <input

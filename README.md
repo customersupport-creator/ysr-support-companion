@@ -23,7 +23,8 @@ npm run dev
 - Resolve removes that number from the queue on this computer only. It does not text the customer or change RingCentral. If they text again, the number comes back. Undo is available for a few seconds, and Resolved today lists what you hid today.
 - When Auto-resolve is on (the default), a real reply from the support line clears that number from the queue and the urgent bell, cancels its pending alert, and logs `Auto-resolved: replied by {agent} at {time CT}`. Reactions, out-of-hours auto-replies, opt-out confirmations, and failed or undelivered sends stay on the queue. A later customer text opens it again.
 - **Open in BeeTexting** is the default. It copies the customer number as `+1XXXXXXXXXX` and opens https://app.beetexting.com/ so you can paste it into BeeTexting search. Settings can store an optional conversation link on that same host, with `{number}`, `{number_e164}`, or `{number_digits}`, for the day BeeTexting documents a thread URL. RingCentral desktop and RingCentral web stay available. Desktop uses `rcapp://r/sms?type=new&number=...` with no message text, and falls back to the website if the app does not open. Nothing is sent.
-- Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text.
+- Consent-warning contacts, and anyone who texts STOP, STOPALL, or UNSUBSCRIBE, are listed under Do not text. A ClickSend STOP is marked `Opted out — do not text`.
+- ClickSend replies are read from Gmail only. Direct mail from `+1...@sms.clicksend.com` and the Google Voice copy of the same text are one queue item, with a ClickSend badge. `Intro sent` means the support line already sent its standard first text. That intro is not a finished reply. A later real reply from +1 (312) 999-5161 clears the item. The Gmail scope is `gmail.readonly`. The desk does not send email.
 - Garage and gate codes are parsed from facility notes. A card shows the code when the thread, a booking, or a manual pick identifies the facility. Codes are hidden until you reveal them. Facilities with codes is a searchable list, in-operation sites first. Parsed codes are encrypted on this computer and refresh on launch, every 30 minutes, and from Refresh.
 - A follow-up reminder starts when an agent promises to check back ("checking on it", "I'll update you", "will endorse this for processing", and the other phrases in the rules). The default is 15 minutes, or 30 for endorse/processing. The Follow-ups tab counts the ones that are due, and a due item can be snoozed or marked done. Another real outbound text clears it.
 - Refunds and promises from the last 30 days are listed with the amount as written, who said it, and how old it is. Amber means older than 24 hours and red means older than 72. Marking done is local. A later "refund was sent" only suggests Done. Export CSV from that tab.
@@ -52,6 +53,10 @@ Create a private REST API app in the [RingCentral developer console](https://dev
 1. App type: REST API App.
 2. Auth: JWT auth flow, and Authorization code if agents will use the OAuth button.
 3. Scopes: **ReadMessages**, **ReadAccounts**, **WebSocketsSubscription**. The app does not send SMS, so it does not need the SMS or EditMessages scopes.
+
+### Gmail, for ClickSend replies
+
+Create an OAuth client in Google Cloud (Desktop app). The only scope the desk requests is `https://www.googleapis.com/auth/gmail.readonly`. Redirect URI: `http://127.0.0.1:47822/callback`. Put the client ID and secret in Settings and click Connect Gmail. The desk searches for ClickSend reply mail and Google Voice copies. It does not send, delete, or label mail.
 4. OAuth redirect URI, if you use the login button: `http://127.0.0.1:47821/callback`.
 5. Generate a JWT for the extension that owns **+1 312-999-5161**, or have each agent sign in with OAuth as a user who can read that line's message store.
 6. An account admin must grant the app access to the account.

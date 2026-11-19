@@ -1,3 +1,4 @@
+import { INTRO_TEXT } from "../core/clicksend";
 import { SUPPORT_LINE_E164 } from "../shared/constants";
 import type { Booking, ConsentWarning, FacilityRecord, SmsMessage } from "../shared/types";
 
@@ -18,12 +19,19 @@ export const DEMO_PHONES = {
   refundSent: "+17735550112",
   alertA: "+13125550301",
   alertB: "+13125550302",
+  clicksendOpen: "+13125550181",
+  clicksendIntro: "+13125550182",
+  clicksendStop: "+13125550183",
 } as const;
 
 export const DEMO_CONSENT: ConsentWarning[] = [
   {
     phone: DEMO_PHONES.consent,
     reason: "Consent warning on file. Do not text this number.",
+  },
+  {
+    phone: DEMO_PHONES.clicksendStop,
+    reason: "Opted out — do not text",
   },
 ];
 
@@ -272,7 +280,18 @@ export function buildDemoMessages(now: Date): SmsMessage[] {
     refundSent,
     sms("alert-a", DEMO_PHONES.alertA, "inbound", "The gate code isn't working at 17 Raymond and I can't get in.", at(50)),
     sms("alert-b", DEMO_PHONES.alertB, "inbound", "Can't get in at 17 Raymond. The keypad won't open.", at(40)),
+    clicksend("cs-open", DEMO_PHONES.clicksendOpen, "The gate will not open at 17 Raymond. I can't get in.", at(7)),
+    clicksend("cs-thanks", DEMO_PHONES.clicksendIntro, "Thanks!", at(9)),
+    {
+      ...sms("cs-intro", DEMO_PHONES.clicksendIntro, "outbound", INTRO_TEXT, at(8)),
+      source: "ringcentral" as const,
+    },
+    clicksend("cs-stop", DEMO_PHONES.clicksendStop, "STOP", at(12)),
   ];
+}
+
+function clicksend(id: string, phone: string, body: string, sentAt: string): SmsMessage {
+  return { ...sms(id, phone, "inbound", body, sentAt), source: "clicksend" };
 }
 
 /** A fresh RED inbound used by the Simulate button. Not part of the seeded queue. */

@@ -1,7 +1,7 @@
 import type { PanelId } from "./constants";
 
 export type Direction = "inbound" | "outbound";
-export type MessageSource = "ringcentral" | "airtable" | "demo";
+export type MessageSource = "ringcentral" | "airtable" | "demo" | "clicksend";
 export type Urgency = "RED" | "YELLOW" | "GREEN";
 
 export interface SmsMessage {
@@ -47,6 +47,9 @@ export interface QueueCard {
   lastCustomerMessageId: string;
   /** thread id + message id, so a new customer text is a new queue item */
   key: string;
+  channel: "ringcentral" | "clicksend";
+  /** Null unless this waiting text arrived through ClickSend. */
+  introSent: boolean | null;
   facilityRecordId: string | null;
   facilityName: string | null;
   access: FacilityAccess | null;
@@ -378,6 +381,9 @@ export interface PublicSettings {
   endorseFollowUpMinutes: number;
   facilityAlertCustomers: number;
   facilityAlertHours: number;
+  gmailClientId: string;
+  hasGmailSecret: boolean;
+  gmailConnected: boolean;
   consentPhones: ConsentWarning[];
   secureStorage: boolean;
 }
@@ -435,6 +441,9 @@ export interface SettingsPatch {
   endorseFollowUpMinutes?: number;
   facilityAlertCustomers?: number;
   facilityAlertHours?: number;
+  gmailClientId?: string;
+  gmailClientSecret?: string;
+  clearGmailSecret?: boolean;
   consentPhones?: ConsentWarning[];
 }
 
@@ -459,6 +468,8 @@ export interface YsrApi {
   testRingCentral(): Promise<ActionResult>;
   testAirtable(): Promise<ActionResult>;
   startOAuth(): Promise<ActionResult>;
+  startGmailOAuth(): Promise<ActionResult>;
+  disconnectGmail(): Promise<ActionResult>;
   disconnectRingCentral(): Promise<ActionResult>;
   simulateInbound(): Promise<ActionResult>;
   getPanelHint(): Promise<PanelId[]>;

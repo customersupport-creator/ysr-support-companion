@@ -24,6 +24,7 @@ interface FileShape {
   endorseFollowUpMinutes: number;
   facilityAlertCustomers: number;
   facilityAlertHours: number;
+  gmailClientId: string;
   consentPhones: ConsentWarning[];
   sealed: Record<string, string>;
 }
@@ -35,9 +36,11 @@ export interface Secrets {
   rcRefreshToken: string;
   rcAccessToken: string;
   rcAccessExpiresAt: number;
+  gmailClientSecret: string;
+  gmailRefreshToken: string;
 }
 
-const SECRET_KEYS = ["rcClientSecret", "rcJwt", "airtableToken", "rcRefreshToken", "rcAccessToken"] as const;
+const SECRET_KEYS = ["rcClientSecret", "rcJwt", "airtableToken", "rcRefreshToken", "rcAccessToken", "gmailClientSecret", "gmailRefreshToken"] as const;
 
 function defaults(): FileShape {
   return {
@@ -60,6 +63,7 @@ function defaults(): FileShape {
     endorseFollowUpMinutes: 30,
     facilityAlertCustomers: 3,
     facilityAlertHours: 3,
+    gmailClientId: "",
     consentPhones: [],
     sealed: {},
   };
@@ -164,6 +168,10 @@ export class SettingsStore {
     return this.file.rcClientId;
   }
 
+  get gmailClientId(): string {
+    return this.file.gmailClientId || "";
+  }
+
   secureStorageAvailable(): boolean {
     try {
       return safeStorage.isEncryptionAvailable();
@@ -197,6 +205,9 @@ export class SettingsStore {
       endorseFollowUpMinutes: positive(this.file.endorseFollowUpMinutes, 30),
       facilityAlertCustomers: positive(this.file.facilityAlertCustomers, 3),
       facilityAlertHours: positive(this.file.facilityAlertHours, 3),
+      gmailClientId: this.file.gmailClientId || "",
+      hasGmailSecret: Boolean(this.memorySecrets.gmailClientSecret),
+      gmailConnected: Boolean(this.memorySecrets.gmailRefreshToken),
       consentPhones: this.file.consentPhones,
       secureStorage: this.secureStorageAvailable(),
     };
@@ -212,6 +223,7 @@ export class SettingsStore {
     if (patch.demoMode != null) this.file.demoMode = patch.demoMode;
     if (patch.rcServer) this.file.rcServer = patch.rcServer;
     if (patch.rcClientId != null) this.file.rcClientId = patch.rcClientId.trim();
+    if (patch.gmailClientId != null) this.file.gmailClientId = patch.gmailClientId.trim();
     if (patch.notificationsEnabled != null) this.file.notificationsEnabled = patch.notificationsEnabled;
     if (patch.alwaysOnTop != null) this.file.alwaysOnTop = patch.alwaysOnTop;
     if (patch.openNumbersIn === "desktop" || patch.openNumbersIn === "web" || patch.openNumbersIn === "beetexting") {
@@ -279,6 +291,19 @@ export class SettingsStore {
     fs.writeFileSync(this.urgentSeenPath, JSON.stringify(records, null, 2), "utf8");
   }
 
+  rememberGmail(refreshToken: string): void {
+    this.memorySecrets.gmailRefreshToken = refreshToken;
+    if (!this.secureStorageAvailable()) return;
+    this.file.sealed.gmailRefreshToken = seal(refreshToken);
+    this.persist();
+  }
+
+  clearGmail(): void {
+    this.memorySecrets.gmailRefreshToken = "";
+    delete this.file.sealed.gmailRefreshToken;
+    this.persist();
+  }
+
   clearTokens(): void {
     this.memorySecrets.rcAccessToken = "";
     this.memorySecrets.rcRefreshToken = "";
@@ -290,10 +315,11 @@ export class SettingsStore {
   }
 
   private applySecrets(patch: SettingsPatch): string {
-    const writes: Array<["rcClientSecret" | "rcJwt" | "airtableToken", string | undefined, boolean | undefined]> = [
+    const writes: Array<["rcClientSecret" | "rcJwt" | "airtableToken" | "gmailClientSecret", string | undefined, boolean | undefined]> = [
       ["rcClientSecret", patch.rcClientSecret, patch.clearRcSecret],
       ["rcJwt", patch.rcJwt, patch.clearRcJwt],
       ["airtableToken", patch.airtableToken, patch.clearAirtableToken],
+      ["gmailClientSecret", patch.gmailClientSecret, patch.clearGmailSecret],
     ];
     for (const [key, value, clear] of writes) {
       if (clear) {
@@ -348,6 +374,8 @@ function emptySecrets(): Secrets {
     rcRefreshToken: "",
     rcAccessToken: "",
     rcAccessExpiresAt: 0,
+    gmailClientSecret: "",
+    gmailRefreshToken: "",
   };
 }
 

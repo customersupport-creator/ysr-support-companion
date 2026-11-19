@@ -1,4 +1,5 @@
 import type { ResolvedRecord, SmsMessage } from "../shared/types";
+import { isIntroText } from "./clicksend";
 import { isReactionMessage } from "./reactions";
 
 const FAILED_STATUS = /fail|undeliver|reject|bounce/i;
@@ -34,6 +35,7 @@ export function isGenuineAgentReply(message: SmsMessage): boolean {
   if (isReactionMessage(message.body)) return false;
   if (isFailedDelivery(message)) return false;
   if (isSystemAutoReply(message.body)) return false;
+  if (isIntroText(message.body)) return false;
   return true;
 }
 

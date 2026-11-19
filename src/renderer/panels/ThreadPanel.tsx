@@ -40,6 +40,10 @@ export function ThreadPanel({
             <ValueBadge value={thread.card.value} />
             <IssueTags issues={thread.card.issues} />
             <b className={`urgency inline ${thread.card.urgency.toLowerCase()}`}>{thread.card.urgency}</b>
+            {thread.card.channel === "clicksend" ? <b className="badge alert">ClickSend</b> : null}
+            {thread.card.channel === "clicksend" ? (
+              <b className="badge">{thread.card.introSent ? "Intro sent" : "No intro yet"}</b>
+            ) : null}
             {thread.card.urgent ? <b className="badge">URGENT</b> : null}
             <span> waiting {formatWait(Date.now() - Date.parse(thread.card.waitingSince))}</span>
           </p>

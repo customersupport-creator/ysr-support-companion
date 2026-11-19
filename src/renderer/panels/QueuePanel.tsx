@@ -132,6 +132,8 @@ function Card({
       <button type="button" className="card-open" onClick={() => onOpen(card.threadId)}>
         <span className="card-top">
           <b className="urgency">{card.urgency}</b>
+          {card.channel === "clicksend" ? <b className="badge alert">ClickSend</b> : null}
+          {card.channel === "clicksend" ? <b className="badge">{card.introSent ? "Intro sent" : "No intro yet"}</b> : null}
           {card.urgent ? <b className="badge">URGENT</b> : null}
           {ready ? <b className="badge alert">5 min</b> : null}
           <time>{wait}</time>

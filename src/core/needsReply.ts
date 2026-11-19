@@ -1,6 +1,7 @@
 import type { QueueCard, ResolvedRecord, SmsMessage, Thread } from "../shared/types";
 import { attentionHeadline, formatPhoneDisplay, truncate } from "./format";
 import { isReactionMessage } from "./reactions";
+import { isIntroText } from "./clicksend";
 import { isGenuineAgentReply } from "./replies";
 import { extractRentalIds } from "./rentalIds";
 import { isResolvedForMessage } from "./resolved";
@@ -68,6 +69,11 @@ export function queueFromThreads(threads: Thread[], nowMs: number, resolved: Res
       rentalIds: extractRentalIds(thread.messages, thread.customerPhone),
       lastCustomerMessageId: assessment.message.id,
       key: `${thread.id}:${assessment.message.id}`,
+      channel: assessment.message.source === "clicksend" ? "clicksend" : "ringcentral",
+      introSent:
+        assessment.message.source === "clicksend"
+          ? thread.messages.some((message) => message.direction === "outbound" && isIntroText(message.body))
+          : null,
       facilityRecordId: null,
       facilityName: null,
       access: null,

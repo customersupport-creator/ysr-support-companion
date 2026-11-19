@@ -58,6 +58,9 @@ export function createBrowserDemo(): YsrApi {
     endorseFollowUpMinutes,
     facilityAlertCustomers,
     facilityAlertHours,
+    gmailClientId: "",
+    hasGmailSecret: false,
+    gmailConnected: false,
     consentPhones: DEMO_CONSENT,
     secureStorage: false,
   });
@@ -233,6 +236,8 @@ export function createBrowserDemo(): YsrApi {
     testRingCentral: async () => desktopOnly("RingCentral login"),
     testAirtable: async () => desktopOnly("Airtable"),
     startOAuth: async () => desktopOnly("OAuth"),
+    startGmailOAuth: async () => desktopOnly("Gmail"),
+    disconnectGmail: async () => ({ ok: true, message: "Demo mode is not connected to Gmail." }),
     disconnectRingCentral: async () => ({ ok: true, message: "Demo mode is not signed in." }),
     simulateInbound: async () => {
       const message = simulatedInbound(new Date());

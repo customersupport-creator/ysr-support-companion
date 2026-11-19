@@ -15,6 +15,8 @@ import { PLAYBOOK_SOPS } from "../demo/playbookSops";
 import { AirtableClient } from "../services/airtable/client";
 import { RingCentralClient } from "../services/ringcentral/client";
 import { RcEventStream } from "../services/ringcentral/subscription";
+import { GmailClient } from "../services/gmail/client";
+import { gmailAccessToken, loginGmail } from "./gmailOauth";
 import { loginWithOAuth } from "./oauth";
 import { SettingsStore } from "./settingsStore";
 
@@ -255,6 +257,27 @@ export class DeskEngine {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "OAuth failed." };
     }
+  }
+
+  async startGmailOAuth(): Promise<ActionResult> {
+    try {
+      if (!this.store.gmailClientId || !this.store.secrets.gmailClientSecret) {
+        return { ok: false, message: "Add the Gmail client ID and client secret first. The scope is read-only." };
+      }
+      const refresh = await loginGmail(this.store.gmailClientId, this.store.secrets.gmailClientSecret);
+      this.store.rememberGmail(refresh);
+      if (!this.store.demoMode) await this.pullClicksend();
+      this.broadcast();
+      return { ok: true, message: "Gmail is connected for reading ClickSend replies. Nothing is sent." };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Gmail connection failed." };
+    }
+  }
+
+  async disconnectGmail(): Promise<ActionResult> {
+    this.store.clearGmail();
+    this.broadcast();
+    return { ok: true, message: "Gmail was disconnected." };
   }
 
   async disconnectRingCentral(): Promise<ActionResult> {
@@ -498,7 +521,13 @@ export class DeskEngine {
   }
 
   private async reconcile(): Promise<void> {
-    if (!this.rc || this.store.demoMode) return;
+    if (this.store.demoMode) return;
+    try {
+      await this.pullClicksend();
+    } catch {
+      // ClickSend mail is optional. A Gmail failure does not stop RingCentral reads.
+    }
+    if (!this.rc) return;
     try {
       const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
       const synced = await this.rc.syncSms(this.syncToken, since);
@@ -511,6 +540,23 @@ export class DeskEngine {
     } catch (error) {
       this.rcDetail = error instanceof Error ? error.message : "Reconciliation failed.";
       this.broadcast();
+    }
+  }
+
+  private async pullClicksend(): Promise<void> {
+    if (this.store.demoMode || !this.store.gmailClientId || !this.store.secrets.gmailClientSecret || !this.store.secrets.gmailRefreshToken) {
+      return;
+    }
+    try {
+      const access = await gmailAccessToken(
+        this.store.gmailClientId,
+        this.store.secrets.gmailClientSecret,
+        this.store.secrets.gmailRefreshToken,
+      );
+      const messages = await new GmailClient(access).listClicksendReplies();
+      if (messages.length) this.ingest(messages);
+    } catch {
+      // Read-only poll. Leave the queue as it is when Gmail is briefly unavailable.
     }
   }
 
@@ -540,7 +586,7 @@ export class DeskEngine {
     const additions: Array<{ phone: string; reason: string }> = [];
     for (const message of messages) {
       if (message.direction === "inbound" && isStopKeyword(message.body)) {
-        additions.push({ phone: message.threadId, reason: "Customer sent STOP. Do not text." });
+        additions.push({ phone: message.threadId, reason: "Opted out — do not text" });
       }
     }
     if (additions.length) {

@@ -5,6 +5,8 @@ export const SUPPORT_LINE_DISPLAY = "(312) 999-5161";
 /** Registered loopback redirect for the desktop OAuth login. */
 export const OAUTH_REDIRECT_URI = "http://127.0.0.1:47821/callback";
 export const OAUTH_PORT = 47821;
+export const GMAIL_OAUTH_PORT = 47822;
+export const GMAIL_REDIRECT_URI = "http://127.0.0.1:47822/callback";
 
 /** Message-store is a RingCentral "Light" group, about 50 requests/minute. */
 export const MESSAGE_STORE_LIMIT_PER_MIN = 40;
